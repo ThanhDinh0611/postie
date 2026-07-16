@@ -261,23 +261,37 @@ function AppInner() {
 
 
   const loadData = useCallback(async () => {
-    if (!isSignedIn) return;
+    if (!isSignedIn) {
+      console.log('[loadData] User not signed in. Skipping data load.');
+      return;
+    }
+    console.log('[loadData] Fetching auth token...');
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      console.warn('[loadData] No token received from Clerk.');
+      return;
+    }
     try {
+      console.log('[loadData] Triggering backend auth sync...');
       const syncRes = await syncAuthUser(token);
+      console.log('[loadData] Sync response from backend:', syncRes);
       const isUserAdmin = syncRes.role === 'admin';
+      console.log(`[loadData] User admin status: ${isUserAdmin}`);
       setIsAdmin(isUserAdmin);
 
       if (isUserAdmin) {
+        console.log('[loadData] User is admin. Fetching dashboard resources...');
         const [fetchedPages, fetchedPosts, fetchedLinks] = await Promise.all([
           getPages(token), getPosts(token), getLinks(token),
         ]);
         setPages(fetchedPages);
         setPosts(fetchedPosts);
         setLinks(fetchedLinks);
+        console.log('[loadData] All dashboard resources fetched successfully.');
       }
-    } catch (err) { console.error('Failed to load data:', err); }
+    } catch (err) {
+      console.error('[loadData] Error during loadData execution:', err);
+    }
   }, [isSignedIn, getToken]);
 
   useEffect(() => { loadData(); }, [loadData, location.pathname]);
