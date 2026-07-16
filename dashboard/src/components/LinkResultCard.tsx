@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 interface LinkResultCardProps {
   permalink: string;
   facebookPostId: string;
@@ -5,9 +7,19 @@ interface LinkResultCardProps {
 }
 
 export default function LinkResultCard({ permalink, facebookPostId, onReset }: LinkResultCardProps) {
+  const [copied, setCopied] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
+
   const handleCopyLink = () => {
     navigator.clipboard.writeText(permalink);
-    alert('📋 Đã sao chép liên kết bài viết!');
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCopyId = () => {
+    navigator.clipboard.writeText(facebookPostId);
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 2000);
   };
 
   return (
@@ -27,9 +39,12 @@ export default function LinkResultCard({ permalink, facebookPostId, onReset }: L
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginTop: '0.5rem' }}>
-        <button className="btn" onClick={handleCopyLink}>
-          📋 Copy Link
+      <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+        <button className="btn" onClick={handleCopyLink} style={copied ? { borderColor: 'var(--success)' } : {}}>
+          {copied ? '✅ Đã copy' : '📋 Copy Link'}
+        </button>
+        <button className="btn" onClick={handleCopyId} style={copiedId ? { borderColor: 'var(--success)' } : {}}>
+          {copiedId ? '✅ Đã copy' : '🆔 Copy ID'}
         </button>
         <a href={permalink} target="_blank" rel="noopener noreferrer" className="btn btn-primary">
           🔗 Xem trên Facebook

@@ -79,23 +79,25 @@ postie/
 - [x] **2.8** Wire frontend → API → display generated post
 
 ### Phase 3: Publish + Links (Core Feature)
-- [ ] **3.1** Implement `POST /api/posts/publish` endpoint
-- [ ] **3.2** Implement `buildPermalink()` — Facebook URL construction
-- [ ] **3.3** Implement photo post publishing
-- [ ] **3.4** Implement scheduled publishing
-- [ ] **3.5** Build **LinkResultCard** component (copy, open, clear cache)
-- [ ] **3.6** Build publish flow: Generate → Preview → Publish → Show Link
-- [ ] **3.7** Implement `POST /api/posts/:id/clear-cache`
-- [ ] **3.8** E2E test: Generate → Publish → Get Link → Open on Facebook
+- [x] **3.1** Implement `POST /api/posts/publish` endpoint
+- [x] **3.2** Implement `buildPermalink()` — Facebook URL construction
+- [x] **3.3** Implement photo post publishing
+- [x] **3.4** Implement scheduled publishing
+- [x] **3.5** Build **LinkResultCard** component (copy, open, clear cache) — enhanced with inline copy feedback
+- [x] **3.6** Build publish flow: Generate → Preview → Publish → Show Link — added **PublishModal** with confirmation + scheduling
+- [x] **3.7** Implement `POST /api/posts/:id/clear-cache`
+- [x] **3.8** Implement `POST /api/links/:id/generate` endpoint for share link retrieval
+- [x] **3.9** Build **PostHistory** component with post/link tabs, status filters, copy/open actions
+- [x] **3.10** Wire end-to-end: Generate → PublishModal → Publish → LinkResultCard → History page
 
 ### Phase 4: Dashboard & History
-- [ ] **4.1** Build **LinksPage** — full list of published posts with links
-- [ ] **4.2** Build **PagesPage** — connected Facebook pages management
-- [ ] **4.3** Build page selection/activation flow
+- [x] **4.1** Build **LinksPage** — full list of published posts with links
+- [x] **4.2** Build **PagesPage** — connected Facebook pages management
+- [x] **4.3** Build page selection/activation flow
 - [ ] **4.4** Build **ImageUploader** component (upload to R2, preview, attach)
 - [ ] **4.5** Build **SocialPreview** — simulate how link looks on Facebook
-- [ ] **4.6** Implement clipboard copy for permalinks
-- [ ] **4.7** Add auto-refresh on navigation
+- [x] **4.6** Implement clipboard copy for permalinks — with inline feedback (no alert)
+- [x] **4.7** Add auto-refresh on navigation
 
 ### Phase 5: Reel Generation
 - [ ] **5.1** Add Reel format to `core/ai.ts` — ultra-short caption (<80 chars)
@@ -164,8 +166,8 @@ postie/
 |-------|--------|---------|-----------|
 | **P1: Foundation** | 🟢 Completed | 2026-07-16 | 2026-07-16 |
 | **P2: AI Post Gen** | 🟢 Completed | 2026-07-16 | 2026-07-16 |
-| **P3: Publish + Links** | 🔴 Not started | — | — |
-| **P4: Dashboard** | 🔴 Not started | — | — |
+| **P3: Publish + Links** | 🟢 Completed | 2026-07-16 | 2026-07-16 |
+| **P4: Dashboard** | 🟡 In progress | 2026-07-16 | — |
 | **P5: Reel Generation** | 🔴 Not started | — | — |
 | **P6: Billing & Polish** | 🔴 Not started | — | — |
 

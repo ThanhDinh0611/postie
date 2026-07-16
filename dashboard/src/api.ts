@@ -43,6 +43,7 @@ export interface GenerateResponse {
   variants: string[];
   generationId: string;
   tokenUsage: { input: number; output: number; total: number } | null;
+  tone?: string;
 }
 
 export interface PublishRequest {
@@ -161,6 +162,21 @@ export async function getLinks(token: string): Promise<LinkData[]> {
 
 export async function getLinkDetail(postId: string, token: string): Promise<LinkData> {
   return fetchJson<LinkData>(`${API_BASE}/api/links/${postId}`, { headers: authHeaders(token) });
+}
+
+export async function generateLink(postId: string, token: string): Promise<{
+  postId: string;
+  permalink: string;
+  facebookPostId: string | null;
+  message: string;
+  status: string;
+  pageName: string;
+  pageUsername: string | null;
+}> {
+  return fetchJson(`${API_BASE}/api/links/${postId}/generate`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
 }
 
 // ─── Media API ───────────────────────────────────────────────────────────────

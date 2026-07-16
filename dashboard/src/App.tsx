@@ -6,6 +6,8 @@ import { getPages, getPosts, getLinks, generatePost, publishPost, syncAuthUser, 
 import PostGenerator from './components/PostGenerator.tsx';
 import PostPreview from './components/PostPreview.tsx';
 import LinkResultCard from './components/LinkResultCard.tsx';
+import PublishModal from './components/PublishModal.tsx';
+import PostHistory from './components/PostHistory.tsx';
 
 const CLERK_PUBLISHABLE_KEY = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string || '').trim();
 
@@ -17,6 +19,7 @@ function NavBar({ isAdmin }: { isAdmin: boolean }) {
 
   const navLinks = isAdmin ? [
     { to: '/', label: '🏠 Tạo bài viết', exact: true },
+    { to: '/history', label: '📝 Lịch sử' },
     { to: '/links', label: '🔗 Link của tôi' },
     { to: '/pages', label: '📋 Trang Facebook' },
   ] : [];
@@ -52,10 +55,12 @@ function NavBar({ isAdmin }: { isAdmin: boolean }) {
 
 // ─── Page Components ─────────────────────────────────────────────────────────
 
-function HomePage({ pages }: { pages: PageData[] }) {
+function HomePage({ pages, onDataChange }: { pages: PageData[]; onDataChange?: () => void }) {
   const { getToken } = useAuth();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [publishContent, setPublishContent] = useState('');
   const [generationResult, setGenerationResult] = useState<GenerateResponse | null>(null);
   const [publishResult, setPublishResult] = useState<PublishResponse | null>(null);
   const [selectedPageId, setSelectedPageId] = useState('');
@@ -96,11 +101,18 @@ function HomePage({ pages }: { pages: PageData[] }) {
     }
   };
 
-  const handlePublish = async (finalContent: string) => {
+  // Show publish confirmation modal
+  const handleShowPublishModal = (finalContent: string) => {
     if (!selectedPageId) {
       alert('⚠️ Vui lòng chọn Fanpage để đăng bài!');
       return;
     }
+    setPublishContent(finalContent);
+    setShowPublishModal(true);
+  };
+
+  // Actually publish after modal confirmation
+  const handleConfirmPublish = async (finalContent: string, scheduledAt?: number) => {
     setIsPublishing(true);
     try {
       const token = await getToken();
@@ -109,9 +121,13 @@ function HomePage({ pages }: { pages: PageData[] }) {
         content: finalContent,
         pageId: selectedPageId,
         hookType: generationResult?.selectedHook,
-        formula: generationResult?.formulaApplied
+        formula: generationResult?.formulaApplied,
+        tone: generationResult?.tone ?? undefined,
+        scheduledAt,
       }, token);
       setPublishResult(result);
+      setShowPublishModal(false);
+      onDataChange?.(); // Refresh parent data
     } catch (err) {
       alert(`⚠️ Lỗi đăng bài: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -130,6 +146,17 @@ function HomePage({ pages }: { pages: PageData[] }) {
       <h2>Tạo bài viết mới</h2>
       <p className="text-muted">AI sẽ viết nội dung dựa trên chủ đề, tối ưu cho Facebook.</p>
 
+      {showPublishModal && (
+        <PublishModal
+          content={publishContent}
+          pages={pages}
+          selectedPageId={selectedPageId}
+          isPublishing={isPublishing}
+          onConfirm={handleConfirmPublish}
+          onCancel={() => { if (!isPublishing) setShowPublishModal(false); }}
+        />
+      )}
+
       {publishResult ? (
         <LinkResultCard
           permalink={publishResult.permalink}
@@ -143,7 +170,7 @@ function HomePage({ pages }: { pages: PageData[] }) {
             <PostPreview
               content={generationResult.content}
               isPublishing={isPublishing}
-              onPublish={handlePublish}
+              onPublish={handleShowPublishModal}
               pages={pages}
               selectedPageId={selectedPageId}
               setSelectedPageId={setSelectedPageId}
@@ -324,12 +351,34 @@ function AppInner() {
                   </div>
                 </SignedOut>
                 <SignedIn>
-                  {isAdmin ? <HomePage pages={pages} /> : <AdminRequiredPage />}
+                  {isAdmin ? <HomePage pages={pages} onDataChange={loadData} /> : <AdminRequiredPage />}
                 </SignedIn>
               </>
             }
           />
           <Route path="/auth/*" element={<AuthPage />} />
+          <Route
+            path="/history"
+            element={
+              <>
+                <SignedIn>
+                  {isAdmin ? (
+                    <div className="container">
+                      <div style={{ height: 24 }} />
+                      <h2>📝 Lịch sử đăng bài</h2>
+                      <p className="text-muted">Quản lý các bài viết và link đã tạo.</p>
+                      <div style={{ marginTop: '1.5rem' }}>
+                        <PostHistory initialPosts={posts} initialLinks={links} onRefresh={loadData} />
+                      </div>
+                    </div>
+                  ) : <AdminRequiredPage />}
+                </SignedIn>
+                <SignedOut>
+                  <RedirectToSignIn />
+                </SignedOut>
+              </>
+            }
+          />
           <Route
             path="/links"
             element={

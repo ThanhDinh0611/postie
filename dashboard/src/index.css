@@ -132,6 +132,43 @@ select.form-control { cursor: pointer; }
   max-height: min(60vh, 360px);
   overflow-y: auto;
   flex: 1;
+
+/* ─── Modal Overlay ─────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+  padding: 1rem;
+}
+.modal-content {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); width: 100%; max-width: 540px;
+  max-height: 90vh; overflow-y: auto; padding: 1.75rem;
+  display: flex; flex-direction: column; gap: 1.25rem;
+}
+.modal-close {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 1.3rem; cursor: pointer; padding: 0.25rem;
+  line-height: 1;
+}
+.modal-close:hover { color: var(--text); }
+
+/* ─── Post History ─────────────────────────────────────────────────── */
+.history-tabs { display: flex; gap: 0.5rem; align-items: center; }
+.history-controls { display: flex; gap: 0.5rem; align-items: center; }
+.history-item {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 1rem;
+  display: flex; align-items: center; gap: 1rem;
+}
+.history-item-detail {
+  flex-direction: column; align-items: stretch; gap: 0.5rem;
+}
+.history-message {
+  font-size: 0.85rem; color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 }
 .preview-body::-webkit-scrollbar { width: 6px; }
 .preview-body::-webkit-scrollbar-track { background: transparent; }
