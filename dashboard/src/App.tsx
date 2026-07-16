@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
-import { ClerkProvider, SignedIn, SignedOut, UserButton, useAuth, useUser, SignIn, SignUp, SignOutButton } from '@clerk/clerk-react';
+import { ClerkProvider, SignedIn, SignedOut, UserButton, useAuth, useUser, SignIn, SignUp, SignOutButton, RedirectToSignIn } from '@clerk/clerk-react';
 import { dark } from '@clerk/themes';
 import { getPages, getPosts, getLinks, generatePost, publishPost, type PageData, type PostData, type LinkData, type GenerateResponse, type PublishResponse } from './api.ts';
 import PostGenerator from './components/PostGenerator.tsx';
@@ -245,17 +245,6 @@ function AdminRequiredPage() {
   );
 }
 
-function SignedInRoutes({ pages, links }: { pages: PageData[]; links: LinkData[] }) {
-  return (
-    <Routes>
-      <Route path="/" element={<HomePage pages={pages} />} />
-      <Route path="/links" element={<LinksPage links={links} />} />
-      <Route path="/pages" element={<PagesPage pages={pages} />} />
-      <Route path="/auth/*" element={<AuthPage />} />
-    </Routes>
-  );
-}
-
 // ─── AppInner ────────────────────────────────────────────────────────────────
 
 function AppInner() {
@@ -298,27 +287,59 @@ function AppInner() {
     <div className="app-layout">
       <NavBar isAdmin={isAdmin} />
       <main className="main-content">
-        <SignedOut>
-          <div className="hero">
-            <h1>✍️ Postie</h1>
-            <p className="hero-sub">Tạo bài viết Facebook bằng AI — Đăng lên fanpage — Nhận link ngay</p>
-            <Link to="/auth" className="btn btn-primary btn-lg">Bắt đầu ngay →</Link>
-            <div className="hero-features">
-              <span>🤖 AI viết bài</span>
-              <span>📸 Đăng ảnh</span>
-              <span>🔗 Tạo link</span>
-              <span>📅 Lên lịch</span>
-              <span>🎬 Viết Reels</span>
-            </div>
-          </div>
-        </SignedOut>
-        <SignedIn>
-          {isAdmin ? (
-            <SignedInRoutes pages={pages} links={links} />
-          ) : (
-            <AdminRequiredPage />
-          )}
-        </SignedIn>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <>
+                <SignedOut>
+                  <div className="hero">
+                    <h1>✍️ Postie</h1>
+                    <p className="hero-sub">Tạo bài viết Facebook bằng AI — Đăng lên fanpage — Nhận link ngay</p>
+                    <Link to="/auth" className="btn btn-primary btn-lg">Bắt đầu ngay →</Link>
+                    <div className="hero-features">
+                      <span>🤖 AI viết bài</span>
+                      <span>📸 Đăng ảnh</span>
+                      <span>🔗 Tạo link</span>
+                      <span>📅 Lên lịch</span>
+                      <span>🎬 Viết Reels</span>
+                    </div>
+                  </div>
+                </SignedOut>
+                <SignedIn>
+                  {isAdmin ? <HomePage pages={pages} /> : <AdminRequiredPage />}
+                </SignedIn>
+              </>
+            }
+          />
+          <Route path="/auth/*" element={<AuthPage />} />
+          <Route
+            path="/links"
+            element={
+              <>
+                <SignedIn>
+                  {isAdmin ? <LinksPage links={links} /> : <AdminRequiredPage />}
+                </SignedIn>
+                <SignedOut>
+                  <RedirectToSignIn />
+                </SignedOut>
+              </>
+            }
+          />
+          <Route
+            path="/pages"
+            element={
+              <>
+                <SignedIn>
+                  {isAdmin ? <PagesPage pages={pages} /> : <AdminRequiredPage />}
+                </SignedIn>
+                <SignedOut>
+                  <RedirectToSignIn />
+                </SignedOut>
+              </>
+            }
+          />
+        </Routes>
       </main>
       <footer className="footer">Postie — Đăng bài ngon lành, link trao tay · Miễn phí</footer>
     </div>
