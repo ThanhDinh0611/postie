@@ -2,7 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { ClerkProvider, SignedIn, SignedOut, UserButton, useAuth, useUser, SignIn, SignUp, SignOutButton } from '@clerk/clerk-react';
 import { dark } from '@clerk/themes';
-import { getPages, getPosts, getLinks, type PageData, type PostData, type LinkData } from './api.ts';
+import { getPages, getPosts, getLinks, generatePost, publishPost, type PageData, type PostData, type LinkData, type GenerateResponse, type PublishResponse } from './api.ts';
+import PostGenerator from './components/PostGenerator.tsx';
+import PostPreview from './components/PostPreview.tsx';
+import LinkResultCard from './components/LinkResultCard.tsx';
 
 const CLERK_PUBLISHABLE_KEY = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string || '').trim();
 
@@ -49,15 +52,110 @@ function NavBar({ isAdmin }: { isAdmin: boolean }) {
 
 // ─── Page Components ─────────────────────────────────────────────────────────
 
-function HomePage() {
+function HomePage({ pages }: { pages: PageData[] }) {
+  const { getToken } = useAuth();
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [generationResult, setGenerationResult] = useState<GenerateResponse | null>(null);
+  const [publishResult, setPublishResult] = useState<PublishResponse | null>(null);
+  const [selectedPageId, setSelectedPageId] = useState('');
+
+  // Set default active page
+  useEffect(() => {
+    if (pages.length > 0 && !selectedPageId) {
+      const active = pages.find(p => p.is_active);
+      if (active) setSelectedPageId(active.id);
+      else setSelectedPageId(pages[0]!.id);
+    }
+  }, [pages, selectedPageId]);
+
+  const handleGenerate = async (data: {
+    topic: string;
+    hookType: string;
+    formula: string;
+    tone: string;
+    postFormat: 'Post' | 'Reel' | 'Video';
+  }) => {
+    setIsGenerating(true);
+    setPublishResult(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('Unauthorized');
+      const result = await generatePost({
+        topic: data.topic,
+        hookType: data.hookType,
+        formula: data.formula,
+        tone: data.tone,
+        postFormat: data.postFormat
+      }, token);
+      setGenerationResult(result);
+    } catch (err) {
+      alert(`⚠️ Lỗi tạo bài viết: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handlePublish = async (finalContent: string) => {
+    if (!selectedPageId) {
+      alert('⚠️ Vui lòng chọn Fanpage để đăng bài!');
+      return;
+    }
+    setIsPublishing(true);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('Unauthorized');
+      const result = await publishPost({
+        content: finalContent,
+        pageId: selectedPageId,
+        hookType: generationResult?.selectedHook,
+        formula: generationResult?.formulaApplied
+      }, token);
+      setPublishResult(result);
+    } catch (err) {
+      alert(`⚠️ Lỗi đăng bài: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const handleReset = () => {
+    setGenerationResult(null);
+    setPublishResult(null);
+  };
+
   return (
     <div className="container">
       <div style={{ height: 24 }} />
       <h2>Tạo bài viết mới</h2>
       <p className="text-muted">AI sẽ viết nội dung dựa trên chủ đề, tối ưu cho Facebook.</p>
-      <div className="placeholder-card">
-        <p>🧪 Giao diện tạo bài viết (PostGenerator + PostPreview + LinkResultCard)</p>
-      </div>
+
+      {publishResult ? (
+        <LinkResultCard
+          permalink={publishResult.permalink}
+          facebookPostId={publishResult.facebookPostId}
+          onReset={handleReset}
+        />
+      ) : (
+        <div className="generator-grid">
+          <PostGenerator onGenerate={handleGenerate} isGenerating={isGenerating} />
+          {generationResult ? (
+            <PostPreview
+              content={generationResult.content}
+              variants={generationResult.variants}
+              isPublishing={isPublishing}
+              onPublish={handlePublish}
+              pages={pages}
+              selectedPageId={selectedPageId}
+              setSelectedPageId={setSelectedPageId}
+            />
+          ) : (
+            <div className="preview-card" style={{ justifyContent: 'center', alignItems: 'center', minHeight: '300px', color: 'var(--text-muted)' }}>
+              <p>🔮 Cấu hình cài đặt bên trái và nhấn nút "Tạo bài viết" để xem bản nháp AI.</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -150,7 +248,7 @@ function AdminRequiredPage() {
 function SignedInRoutes({ pages, links }: { pages: PageData[]; links: LinkData[] }) {
   return (
     <Routes>
-      <Route path="/" element={<HomePage />} />
+      <Route path="/" element={<HomePage pages={pages} />} />
       <Route path="/links" element={<LinksPage links={links} />} />
       <Route path="/pages" element={<PagesPage pages={pages} />} />
       <Route path="/auth/*" element={<AuthPage />} />

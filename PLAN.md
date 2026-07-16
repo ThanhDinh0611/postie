@@ -69,14 +69,14 @@ postie/
 - [x] **1.11** Start dashboard dev — verify Clerk login flow
 
 ### Phase 2: AI Post Generation (Core Feature)
-- [ ] **2.1** Wire DeepSeek API key in worker vars
-- [ ] **2.2** Build and test `core/ai.ts` — `generatePostContent()`
-- [ ] **2.3** Test XML parsing + variant extraction in `parseResponse()`
-- [ ] **2.4** Implement `POST /api/posts/generate` endpoint
-- [ ] **2.5** Implement generation usage tracking
-- [ ] **2.6** Build **PostGenerator** component (topic, hook, formula, tone, format)
-- [ ] **2.7** Build **PostPreview** component (content with variant tabs)
-- [ ] **2.8** Wire frontend → API → display generated post
+- [x] **2.1** Wire DeepSeek API key in worker vars (Mock fallback supported)
+- [x] **2.2** Build and test `core/ai.ts` — `generatePostContent()`
+- [x] **2.3** Test XML parsing + variant extraction in `parseResponse()`
+- [x] **2.4** Implement `POST /api/posts/generate` endpoint
+- [x] **2.5** Implement generation usage tracking
+- [x] **2.6** Build **PostGenerator** component (topic, hook, formula, tone, format)
+- [x] **2.7** Build **PostPreview** component (content with variant tabs)
+- [x] **2.8** Wire frontend → API → display generated post
 
 ### Phase 3: Publish + Links (Core Feature)
 - [ ] **3.1** Implement `POST /api/posts/publish` endpoint
@@ -163,7 +163,7 @@ postie/
 | Phase | Status | Started | Completed |
 |-------|--------|---------|-----------|
 | **P1: Foundation** | 🟢 Completed | 2026-07-16 | 2026-07-16 |
-| **P2: AI Post Gen** | 🔴 Not started | — | — |
+| **P2: AI Post Gen** | 🟢 Completed | 2026-07-16 | 2026-07-16 |
 | **P3: Publish + Links** | 🔴 Not started | — | — |
 | **P4: Dashboard** | 🔴 Not started | — | — |
 | **P5: Reel Generation** | 🔴 Not started | — | — |
