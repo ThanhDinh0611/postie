@@ -8,6 +8,7 @@ import PostPreview from './components/PostPreview.tsx';
 import LinkResultCard from './components/LinkResultCard.tsx';
 import PublishModal from './components/PublishModal.tsx';
 import PostHistory from './components/PostHistory.tsx';
+import PagesManager from './components/PagesManager.tsx';
 
 const CLERK_PUBLISHABLE_KEY = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string || '').trim();
 
@@ -216,26 +217,15 @@ function LinksPage({ links }: { links: LinkData[] }) {
   );
 }
 
-function PagesPage({ pages }: { pages: PageData[] }) {
+function PagesPage({ pages, onPagesChange }: { pages: PageData[]; onPagesChange?: (pages: PageData[]) => void }) {
   return (
     <div className="container">
       <div style={{ height: 24 }} />
       <h2>📋 Trang Facebook</h2>
       <p className="text-muted">Quản lý các trang Facebook đã kết nối.</p>
-      {pages.length === 0 ? (
-        <div className="placeholder-card">
-          <p>Chưa kết nối trang nào. Kết nối qua OAuth để bắt đầu.</p>
-        </div>
-      ) : (
-        <div className="page-grid">
-          {pages.map((page) => (
-            <div key={page.id} className={`page-card ${page.is_active ? 'active' : ''}`}>
-              <div className="page-name">{page.name}</div>
-              <div className="page-status">{page.is_active ? '✅ Đang hoạt động' : '⏸️ Không hoạt động'}</div>
-            </div>
-          ))}
-        </div>
-      )}
+      <div style={{ marginTop: '1.5rem' }}>
+        <PagesManager initialPages={pages} onPagesChange={onPagesChange} />
+      </div>
     </div>
   );
 }
@@ -397,7 +387,7 @@ function AppInner() {
             element={
               <>
                 <SignedIn>
-                  {isAdmin ? <PagesPage pages={pages} /> : <AdminRequiredPage />}
+                  {isAdmin ? <PagesPage pages={pages} onPagesChange={() => { loadData(); }} /> : <AdminRequiredPage />}
                 </SignedIn>
                 <SignedOut>
                   <RedirectToSignIn />
