@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   user_id                TEXT PRIMARY KEY,
   tier                   TEXT NOT NULL DEFAULT 'free',
   subscription_status    TEXT NOT NULL DEFAULT 'active',
+  role                   TEXT NOT NULL DEFAULT 'user',
   plan_expires_at        INTEGER,
   created_at             INTEGER DEFAULT (unixepoch()),
   updated_at             INTEGER DEFAULT (unixepoch())

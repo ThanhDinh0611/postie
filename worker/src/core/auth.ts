@@ -55,11 +55,20 @@ export async function getUserIdFromRequest(request: Request, env: { CLERK_JWKS_U
   return payload?.sub ?? null;
 }
 
-export async function isAdminRequest(request: Request, env: { CLERK_JWKS_URL: string }): Promise<boolean> {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return false;
-  const payload = await verifyClerkJWT(authHeader.slice(7).trim(), env.CLERK_JWKS_URL);
-  return payload?.publicMetadata?.role === 'admin';
+export async function isAdminRequest(request: Request, env: { DB: D1Database; CLERK_JWKS_URL: string }): Promise<boolean> {
+  const userId = await getUserIdFromRequest(request, env);
+  if (!userId) return false;
+
+  try {
+    const row = await env.DB
+      .prepare('SELECT role FROM user_profiles WHERE user_id = ?')
+      .bind(userId)
+      .first<{ role: string }>();
+    return row?.role === 'admin';
+  } catch (err) {
+    console.error('Failed to verify admin request:', err);
+    return false;
+  }
 }
 
 export async function getUserTier(
