@@ -1,0 +1,21 @@
+name = "postie-worker"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "postie-db"
+database_id = "606cb43f-af05-414b-88d0-2da2f781cfb7"
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "postie-images"
+
+[vars]
+ALLOWED_ORIGINS = "https://postie-dashboard.pages.dev"
+CLERK_JWKS_URL  = "https://workable-goat-12.clerk.accounts.dev/.well-known/jwks.json"
+DEEPSEEK_API_KEY = ""
+FACEBOOK_APP_ID = "9034587649978676"
+FACEBOOK_APP_SECRET = "f0c564d82288a36fe1461ec3db73e60e"
+R2_PUBLIC_URL = ""

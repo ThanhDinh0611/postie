@@ -1,0 +1,14 @@
+# Postie — React Architecture & Code Quality Rules
+
+To maintain high code quality and follow React best practices, always split UI code into modular components.
+
+## Rules
+1. **Component Splitting:** Keep page containers focused on state management, fetching, and event coordination.
+2. **Presentational Components:** Extract forms, tables, cards, and distinct visual units into smaller, single-purpose components in `dashboard/src/components/`.
+3. **TypeScript Definitions:** Explicitly type all component props and API responses with interfaces.
+4. **Vertical Slices:** Each Worker feature = `worker/src/features/<name>/` with handler + utils. No cross-feature dependencies.
+5. **Style Reusability:** Use CSS variables from `dashboard/src/index.css`. Avoid inline styles. No styled-components.
+6. **Edge-First:** Minimize npm dependencies, prefer Web APIs over libraries when possible.
+7. **No ORMs:** Use raw SQL with D1 prepared statements. No query builders or ORMs.
+8. **Pure Functions:** Utility functions are pure with no side effects. Keep handlers thin.
+9. **Dark Theme Only:** The design system is dark-only. No light mode support.

@@ -1,0 +1,96 @@
+/* ─── PostNgon Design System ────────────────────────────────────────────────── */
+:root {
+  --bg-primary: #0f1117;
+  --bg-secondary: #171923;
+  --bg-card: #1a1d27;
+  --bg-hover: #222533;
+  --border: #2a2d3a;
+  --border-hover: #3a3d4a;
+  --accent: #f59e0b;
+  --accent-hover: #d97706;
+  --accent-light: rgba(245, 158, 11, 0.12);
+  --text: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #64748b;
+  --danger: #ef4444;
+  --success: #22c55e;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --font: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg-primary);
+  color: var(--text);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hover); }
+
+.app-layout { display: flex; flex-direction: column; min-height: 100vh; }
+.main-content { flex: 1; }
+.container { max-width: 960px; margin: 0 auto; padding: 0 1.25rem; }
+
+/* ─── Navigation ───────────────────────────────────────────────────────────── */
+.nav { border-bottom: 1px solid var(--border); background: var(--bg-secondary); position: sticky; top: 0; z-index: 100; }
+.nav-inner { display: flex; align-items: center; height: 56px; max-width: 1200px; margin: 0 auto; padding: 0 1.25rem; gap: 1rem; }
+.nav-logo { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 1.1rem; color: var(--text) !important; }
+.logo-icon { font-size: 1.3rem; }
+.nav-links { display: flex; gap: 0.25rem; margin-left: 1.5rem; flex: 1; }
+.nav-link { padding: 0.4rem 0.75rem; border-radius: var(--radius-sm); color: var(--text-muted) !important; font-size: 0.85rem; font-weight: 500; }
+.nav-link:hover, .nav-link.active { color: var(--text) !important; background: var(--bg-hover); }
+.nav-auth { display: flex; align-items: center; }
+
+/* ─── Buttons ──────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.5rem 1rem; border-radius: var(--radius-sm);
+  font-size: 0.85rem; font-weight: 500;
+  border: 1px solid var(--border); background: var(--bg-card);
+  color: var(--text) !important; cursor: pointer;
+  text-decoration: none;
+}
+.btn:hover { border-color: var(--border-hover); background: var(--bg-hover); }
+.btn-primary { background: var(--accent); color: #0f1117 !important; border-color: var(--accent); font-weight: 600; }
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-sm { padding: 0.3rem 0.6rem; font-size: 0.78rem; }
+.btn-lg { padding: 0.75rem 1.5rem; font-size: 1rem; }
+
+/* ─── Hero ─────────────────────────────────────────────────────────────────── */
+.hero { text-align: center; padding: 5rem 1.25rem 3rem; }
+.hero h1 { font-size: 3rem; font-weight: 800; background: linear-gradient(135deg, var(--accent), #f97316); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 0.75rem; }
+.hero-sub { font-size: 1.1rem; color: var(--text-muted); margin-bottom: 2rem; }
+.hero-features { display: flex; justify-content: center; gap: 1rem; margin-top: 2.5rem; flex-wrap: wrap; }
+.hero-features span { background: var(--bg-card); border: 1px solid var(--border); padding: 0.5rem 1rem; border-radius: 999px; font-size: 0.85rem; }
+
+/* ─── Typography ───────────────────────────────────────────────────────────── */
+h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem; }
+h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; }
+.text-muted { color: var(--text-muted); font-size: 0.9rem; }
+
+/* ─── Cards & Placeholders ─────────────────────────────────────────────────── */
+.placeholder-card { background: var(--bg-card); border: 1px dashed var(--border); border-radius: var(--radius); padding: 2rem; margin-top: 1.5rem; color: var(--text-muted); text-align: center; line-height: 1.8; }
+.placeholder-card code { background: var(--bg-hover); padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.82rem; }
+
+/* ─── Link List ────────────────────────────────────────────────────────────── */
+.link-list { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.5rem; }
+.link-item { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; display: flex; align-items: center; gap: 1rem; }
+.link-message { flex: 1; font-size: 0.85rem; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-meta { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.78rem; color: var(--text-muted); text-align: right; }
+.badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; background: var(--accent-light); color: var(--accent); }
+
+/* ─── Page Grid ────────────────────────────────────────────────────────────── */
+.page-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+.page-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; }
+.page-card.active { border-color: var(--accent); }
+.page-name { font-weight: 600; margin-bottom: 0.5rem; }
+.page-status { font-size: 0.82rem; color: var(--text-muted); }
+
+/* ─── Footer ───────────────────────────────────────────────────────────────── */
+.footer { text-align: center; padding: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.78rem; }

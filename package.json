@@ -1,0 +1,16 @@
+{
+  "name": "postie-root",
+  "version": "1.0.0",
+  "description": "Postie — AI Facebook post generator & link creator",
+  "scripts": {
+    "dev:worker": "npm run dev --prefix worker",
+    "dev:dashboard": "npm run dev --prefix dashboard",
+    "build:dashboard": "npm run build --prefix dashboard",
+    "deploy:worker": "npm run deploy --prefix worker",
+    "deploy:dashboard": "npx wrangler pages deploy dashboard/dist --project-name postie-dashboard --branch production",
+    "deploy": "powershell.exe -File ./deploy.ps1"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
