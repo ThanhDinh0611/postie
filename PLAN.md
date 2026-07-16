@@ -177,6 +177,6 @@ Ported from Whiskey's proven Vietnamese copywriting AI agent:
 - **10 Hook Types**: Sự thật thú vị, Câu chuyện hấp dẫn, Câu hỏi kích thích tư duy, Hot trend, Số liệu cụ thể, Thông tin thiếu, Bí mật/Bí quyết, Tuyên bố gây sốc, Nếu... thì..., Hậu trường
 - **4 Formulas**: AIDA, PAS, FAB, ABC Checklist
 - **5 Tones**: Friendly, Professional, Humorous, Curious, Formal
-- **3 Variants** per generation
+- **1 version** per generation (simplified from 3 variants)
 - **Anti-AI-detection**: No clichés, natural voice, no engagement bait
 - **Reel mode**: Ultra-short captions (<80 chars)

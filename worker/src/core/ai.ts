@@ -69,21 +69,17 @@ QUY TẮC:
 6. Viết tự nhiên như người thật, tránh AI-sounding.
 7. Kết thúc bằng câu hỏi mở để khuyến khích bình luận tự nhiên.
 
-Định dạng đầu ra (XML):
-<selected_hook>Tên hook đã chọn</selected_hook>
-<formula_applied>Tên công thức đã áp dụng</formula_applied>
-<content>Nội dung bài viết hoàn chỉnh</content>
-<variant_1>Biến thể 1</variant_1>
-<variant_2>Biến thể 2</variant_2>
-<variant_3>Biến thể 3</variant_3>`;
+Hãy trả lời theo định dạng CHÍNH XÁC sau (dùng dấu --- để phân cách các phần):
+
+---selected_hook---
+Tên hook đã chọn
+---formula_applied---
+Tên công thức đã áp dụng
+---content---
+Nội dung bài viết hoàn chỉnh`;
 }
 
 export function parseResponse(raw: string, defaultHook: string, defaultFormula: string): GenerateResponse {
-  const extract = (tag: string): string | null => {
-    const match = raw.match(new RegExp(`<${tag}>(.*?)</${tag}>`, 'si'));
-    return match?.[1]?.trim() ?? null;
-  };
-
   const stripMarkdown = (text: string): string => {
     return text
       .replace(/\*\*(.*?)\*\*/g, '$1')
@@ -95,20 +91,35 @@ export function parseResponse(raw: string, defaultHook: string, defaultFormula: 
       .trim();
   };
 
-  const content = stripMarkdown(extract('content') ?? raw);
+  // Try XML tags first (<tag>...</tag>)
+  const extractXml = (tag: string): string | null => {
+    const match = raw.match(new RegExp(`<${tag}>(.*?)</${tag}>`, 'si'));
+    return match?.[1]?.trim() ?? null;
+  };
 
-  const variants = [];
-  for (let i = 1; i <= 3; i++) {
-    const v = extract(`variant_${i}`);
-    if (v) variants.push(stripMarkdown(v));
-  }
-  if (variants.length === 0) variants.push(content);
+  // Try ---tag--- delimiter format
+  const extractDash = (tag: string): string | null => {
+    const regex = new RegExp(`---${tag}---\\s*\\n?([\\s\\S]*?)(?:\\n---|$)`, 'i');
+    const match = raw.match(regex);
+    if (match) return match[1]?.trim() ?? null;
+    // Alternative: try with \n before ---
+    const regex2 = new RegExp(`---${tag}---([\\s\\S]*?)(?:---|$)`, 'i');
+    const match2 = raw.match(regex2);
+    return match2?.[1]?.trim() ?? null;
+  };
+
+  // Helper: try both formats
+  const extract = (tag: string): string | null => {
+    return extractXml(tag) ?? extractDash(tag) ?? null;
+  };
+
+  const content = stripMarkdown(extract('content') ?? '') || raw;
 
   return {
     content,
     selectedHook: extract('selected_hook') ?? defaultHook,
     formulaApplied: extract('formula_applied') ?? defaultFormula,
-    variants,
+    variants: [],
     tokenUsage: null,
   };
 }
@@ -122,11 +133,7 @@ export async function generatePostContent(
       content: `Đây là bài viết mẫu được tạo tự động bởi Postie cho chủ đề: "${request.topic}".\n\n📌 Bài viết đã được áp dụng công thức ${request.formula} và tối ưu hóa theo tông giọng ${request.tone}.\n\nBạn nghĩ sao về giải pháp này? Hãy để lại bình luận bên dưới nhé! 👇\n\n#postie #facebookmarketing`,
       selectedHook: request.hookType,
       formulaApplied: request.formula,
-      variants: [
-        `Biến thể 1: Bạn đang tìm kiếm giải pháp cho "${request.topic}"? Đọc ngay bài viết này để biết cách tối ưu hóa hiệu quả với công thức ${request.formula}. #marketing`,
-        `Biến thể 2: Hậu trường câu chuyện về "${request.topic}". Chia sẻ thực tế với tông giọng ${request.tone} dành cho các marketer. #marketing`,
-        `Biến thể 3: Checklist 3 bước giải quyết triệt để bài toán "${request.topic}". Lưu lại ngay! #marketing`
-      ],
+      variants: [],
       tokenUsage: { input: 120, output: 250, total: 370 },
     };
   }
@@ -140,10 +147,13 @@ export async function generatePostContent(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'deepseek-v3',
-      messages: [{ role: 'user', content: prompt }],
+      model: 'deepseek-v4-flash',
+      messages: [
+        { role: 'system', content: 'Bạn là copywriter Facebook chuyên nghiệp, viết bài đăng Facebook bằng tiếng Việt tự nhiên, tránh AI-sounding. Tuân thủ chặt chẽ định dạng đầu ra được yêu cầu.' },
+        { role: 'user', content: prompt },
+      ],
       temperature: 0.7,
-      max_tokens: 2000,
+      max_tokens: 4000,
     }),
   });
 
@@ -156,7 +166,18 @@ export async function generatePostContent(
     usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   };
 
-  const result = parseResponse(data.choices[0]?.message?.content ?? '', request.hookType, request.formula);
+  const rawContent = data.choices[0]?.message?.content ?? '';
+  // If XML parsing returns empty, fall back to entire raw content
+  let result = parseResponse(rawContent, request.hookType, request.formula);
+  if (!result.content || result.content.trim() === '') {
+    result = {
+      content: rawContent,
+      selectedHook: request.hookType,
+      formulaApplied: request.formula,
+      variants: [rawContent],
+      tokenUsage: null,
+    };
+  }
   result.tokenUsage = {
     input: data.usage?.prompt_tokens ?? 0,
     output: data.usage?.completion_tokens ?? 0,

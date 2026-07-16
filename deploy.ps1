@@ -24,11 +24,11 @@ Pop-Location
 # Step 3: Deploy worker
 Write-Host "`n☁️  Deploying worker..." -ForegroundColor Cyan
 Push-Location worker
-wrangler deploy
+npx wrangler deploy
 Pop-Location
 
 # Step 4: Deploy dashboard to Pages
 Write-Host "`n📄 Deploying dashboard to Cloudflare Pages..." -ForegroundColor Cyan
-wrangler pages deploy dashboard/dist --project-name postie-dashboard --branch production
+npx wrangler pages deploy dashboard/dist --project-name postie-dashboard --branch production
 
 Write-Host "`n✅ Postie Deploy Complete!" -ForegroundColor Green

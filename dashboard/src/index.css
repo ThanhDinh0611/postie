@@ -125,12 +125,15 @@ select.form-control { cursor: pointer; }
 /* ─── Preview Panel ───────────────────────────────────────────────────────── */
 .preview-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; height: 100%; }
 .preview-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; }
-.preview-body { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem; font-size: 0.9rem; white-space: pre-wrap; color: var(--text-secondary); }
-.tab-list { display: flex; gap: 0.25rem; background: var(--bg-secondary); padding: 0.2rem; border-radius: var(--radius-sm); width: fit-content; }
-.tab-btn {
-  padding: 0.35rem 0.75rem; border: none; background: transparent; color: var(--text-muted);
-  font-size: 0.8rem; font-weight: 500; cursor: pointer; border-radius: var(--radius-sm);
+.preview-body {
+  background: var(--bg-secondary); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 1rem;
+  font-size: 0.9rem; white-space: pre-wrap; color: var(--text-secondary);
+  max-height: min(60vh, 360px);
+  overflow-y: auto;
+  flex: 1;
 }
-.tab-btn:hover { color: var(--text-secondary); }
-.tab-btn.active { background: var(--bg-card); color: var(--accent); }
+.preview-body::-webkit-scrollbar { width: 6px; }
+.preview-body::-webkit-scrollbar-track { background: transparent; }
+.preview-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 

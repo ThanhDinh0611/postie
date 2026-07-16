@@ -1,9 +1,7 @@
-import { useState } from 'react';
 import { type PageData } from '../api.ts';
 
 interface PostPreviewProps {
   content: string;
-  variants: string[];
   isPublishing: boolean;
   onPublish: (finalContent: string) => void;
   pages: PageData[];
@@ -13,21 +11,14 @@ interface PostPreviewProps {
 
 export default function PostPreview({
   content,
-  variants,
   isPublishing,
   onPublish,
   pages,
   selectedPageId,
   setSelectedPageId,
 }: PostPreviewProps) {
-  // Deduplicate and filter empty variants
-  const allVariants = Array.from(new Set([content, ...variants].map(v => v.trim()).filter(Boolean)));
-  const [activeTab, setActiveTab] = useState(0);
-
-  const activeContent = allVariants[activeTab] ?? content;
-
   const handleCopy = () => {
-    navigator.clipboard.writeText(activeContent);
+    navigator.clipboard.writeText(content);
     alert('📋 Đã sao chép nội dung vào khay nhớ tạm!');
   };
 
@@ -40,25 +31,11 @@ export default function PostPreview({
         </button>
       </div>
 
-      {allVariants.length > 1 && (
-        <div className="tab-list">
-          {allVariants.map((_, idx) => (
-            <button
-              key={idx}
-              className={`tab-btn ${activeTab === idx ? 'active' : ''}`}
-              onClick={() => setActiveTab(idx)}
-            >
-              {idx === 0 ? 'Bản gốc' : `Biến thể ${idx}`}
-            </button>
-          ))}
-        </div>
-      )}
-
       <div className="preview-body">
-        {activeContent}
+        {content}
       </div>
 
-      <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1.25rem', marginTop: 'auto' }}>
+      <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1.25rem' }}>
         <div className="form-group" style={{ marginBottom: '1rem' }}>
           <label htmlFor="publishPage" style={{ fontWeight: 600 }}>📢 Chọn Fanpage đăng bài</label>
           {pages.length === 0 ? (
@@ -86,7 +63,7 @@ export default function PostPreview({
         <button
           className="btn btn-primary"
           style={{ width: '100%', justifyContent: 'center', padding: '0.75rem' }}
-          onClick={() => onPublish(activeContent)}
+          onClick={() => onPublish(content)}
           disabled={isPublishing || pages.length === 0 || !selectedPageId}
         >
           {isPublishing ? '⏳ Đang đăng bài lên Facebook...' : 'Đăng lên Fanpage ngay 🚀'}

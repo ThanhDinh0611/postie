@@ -142,7 +142,6 @@ function HomePage({ pages }: { pages: PageData[] }) {
           {generationResult ? (
             <PostPreview
               content={generationResult.content}
-              variants={generationResult.variants}
               isPublishing={isPublishing}
               onPublish={handlePublish}
               pages={pages}
