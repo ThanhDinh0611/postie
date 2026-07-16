@@ -45,12 +45,7 @@ app.use('*', async (c, next) => {
 // ─── Auth Sync Endpoint (Bypass Admin checking for initial signups) ──────────
 app.post('/api/auth/sync', async (c) => {
   const userId = await getUserIdFromRequest(c.req.raw, c.env);
-  if (!userId) {
-    console.warn('[Sync] Unauthorized sync attempt (no userId found).');
-    return c.json({ error: 'Unauthorized' }, 401);
-  }
-
-  console.log(`[Sync] Syncing user: ${userId}`);
+  if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
   try {
     const existing = await c.env.DB
@@ -58,20 +53,15 @@ app.post('/api/auth/sync', async (c) => {
       .bind(userId)
       .first<{ role: string }>();
 
-    console.log(`[Sync] Found database profile:`, existing);
-
     if (!existing) {
       await c.env.DB
         .prepare('INSERT INTO user_profiles (user_id, tier, subscription_status, role) VALUES (?, ?, ?, ?)')
         .bind(userId, 'free', 'active', 'user')
         .run();
-      console.log('[Sync] Created new profile in D1 with role "user"');
       return c.json({ success: true, role: 'user' });
     }
-    console.log(`[Sync] Returning existing role: "${existing.role}"`);
     return c.json({ success: true, role: existing.role });
   } catch (err) {
-    console.error('[Sync] Error during database sync:', err);
     return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
   }
 });

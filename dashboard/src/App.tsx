@@ -255,48 +255,43 @@ function AppInner() {
   const { isSignedIn, getToken } = useAuth();
   const { isLoaded } = useUser();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isRoleLoading, setIsRoleLoading] = useState(true);
   const location = useLocation();
   console.debug('Loaded posts:', posts.length);
 
-
-
   const loadData = useCallback(async () => {
     if (!isSignedIn) {
-      console.log('[loadData] User not signed in. Skipping data load.');
+      setIsRoleLoading(false);
       return;
     }
-    console.log('[loadData] Fetching auth token...');
     const token = await getToken();
     if (!token) {
-      console.warn('[loadData] No token received from Clerk.');
+      setIsRoleLoading(false);
       return;
     }
     try {
-      console.log('[loadData] Triggering backend auth sync...');
       const syncRes = await syncAuthUser(token);
-      console.log('[loadData] Sync response from backend:', syncRes);
       const isUserAdmin = syncRes.role === 'admin';
-      console.log(`[loadData] User admin status: ${isUserAdmin}`);
       setIsAdmin(isUserAdmin);
 
       if (isUserAdmin) {
-        console.log('[loadData] User is admin. Fetching dashboard resources...');
         const [fetchedPages, fetchedPosts, fetchedLinks] = await Promise.all([
           getPages(token), getPosts(token), getLinks(token),
         ]);
         setPages(fetchedPages);
         setPosts(fetchedPosts);
         setLinks(fetchedLinks);
-        console.log('[loadData] All dashboard resources fetched successfully.');
       }
     } catch (err) {
-      console.error('[loadData] Error during loadData execution:', err);
+      console.error('Failed to load data:', err);
+    } finally {
+      setIsRoleLoading(false);
     }
   }, [isSignedIn, getToken]);
 
   useEffect(() => { loadData(); }, [loadData, location.pathname]);
 
-  if (!isLoaded) {
+  if (!isLoaded || (isSignedIn && isRoleLoading)) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: '#94a3b8' }}>
         <p>Đang tải thông tin tài khoản...</p>
