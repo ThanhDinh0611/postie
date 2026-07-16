@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
-import { ClerkProvider, SignedIn, SignedOut, UserButton, useAuth, useUser, SignIn, SignUp, SignOutButton, RedirectToSignIn } from '@clerk/clerk-react';
+import { ClerkProvider, SignedIn, SignedOut, UserButton, useAuth, useUser, SignIn, SignUp, SignOutButton, RedirectToSignIn, AuthenticateWithRedirectCallback } from '@clerk/clerk-react';
 import { dark } from '@clerk/themes';
 import { getPages, getPosts, getLinks, generatePost, publishPost, syncAuthUser, type PageData, type PostData, type LinkData, type GenerateResponse, type PublishResponse } from './api.ts';
 import PostGenerator from './components/PostGenerator.tsx';
@@ -220,6 +220,7 @@ function AuthPage() {
       <Routes>
         <Route path="/" element={<SignIn routing="path" path="/auth" signUpUrl="/auth/sign-up" />} />
         <Route path="/sign-up" element={<SignUp routing="path" path="/auth/sign-up" signInUrl="/auth" />} />
+        <Route path="/sso-callback" element={<AuthenticateWithRedirectCallback signUpForceRedirectUrl="/" signInForceRedirectUrl="/" />} />
       </Routes>
     </div>
   );
