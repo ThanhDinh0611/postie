@@ -49,17 +49,18 @@ app.post('/api/auth/sync', async (c) => {
 
   try {
     const existing = await c.env.DB
-      .prepare('SELECT user_id FROM user_profiles WHERE user_id = ?')
+      .prepare('SELECT role FROM user_profiles WHERE user_id = ?')
       .bind(userId)
-      .first();
+      .first<{ role: string }>();
 
     if (!existing) {
       await c.env.DB
-        .prepare('INSERT INTO user_profiles (user_id, tier, subscription_status) VALUES (?, ?, ?)')
-        .bind(userId, 'free', 'active')
+        .prepare('INSERT INTO user_profiles (user_id, tier, subscription_status, role) VALUES (?, ?, ?, ?)')
+        .bind(userId, 'free', 'active', 'user')
         .run();
+      return c.json({ success: true, role: 'user' });
     }
-    return c.json({ success: true });
+    return c.json({ success: true, role: existing.role });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
   }

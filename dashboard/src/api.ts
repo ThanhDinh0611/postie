@@ -179,8 +179,8 @@ export async function getMedia(token: string): Promise<{ fileName: string; url: 
 
 // ─── Auth API ────────────────────────────────────────────────────────────────
 
-export async function syncAuthUser(token: string): Promise<void> {
-  await fetchJson<void>(`${API_BASE}/api/auth/sync`, {
+export async function syncAuthUser(token: string): Promise<{ success: boolean; role: string }> {
+  return fetchJson<{ success: boolean; role: string }>(`${API_BASE}/api/auth/sync`, {
     method: 'POST',
     headers: authHeaders(token),
   });

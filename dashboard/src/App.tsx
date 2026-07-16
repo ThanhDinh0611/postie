@@ -253,8 +253,8 @@ function AppInner() {
   const [posts, setPosts] = useState<PostData[]>([]);
   const [links, setLinks] = useState<LinkData[]>([]);
   const { isSignedIn, getToken } = useAuth();
-  const { user, isLoaded } = useUser();
-  const isAdmin = (user?.publicMetadata as Record<string, unknown>)?.role === 'admin';
+  const { isLoaded } = useUser();
+  const [isAdmin, setIsAdmin] = useState(false);
   const location = useLocation();
   console.debug('Loaded posts:', posts.length);
 
@@ -265,8 +265,11 @@ function AppInner() {
     const token = await getToken();
     if (!token) return;
     try {
-      await syncAuthUser(token);
-      if (isAdmin) {
+      const syncRes = await syncAuthUser(token);
+      const isUserAdmin = syncRes.role === 'admin';
+      setIsAdmin(isUserAdmin);
+
+      if (isUserAdmin) {
         const [fetchedPages, fetchedPosts, fetchedLinks] = await Promise.all([
           getPages(token), getPosts(token), getLinks(token),
         ]);
@@ -275,7 +278,7 @@ function AppInner() {
         setLinks(fetchedLinks);
       }
     } catch (err) { console.error('Failed to load data:', err); }
-  }, [isSignedIn, getToken, isAdmin]);
+  }, [isSignedIn, getToken]);
 
   useEffect(() => { loadData(); }, [loadData, location.pathname]);
 
