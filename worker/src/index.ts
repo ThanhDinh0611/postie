@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { isAdminRequest } from './core/auth.ts';
+import { isAdminRequest, getUserIdFromRequest } from './core/auth.ts';
 import { pagesRouter } from './features/pages/pages.handlers.ts';
 import { postsRouter } from './features/posts/posts.handlers.ts';
 import { linksRouter } from './features/links/links.handlers.ts';
@@ -40,6 +40,29 @@ app.use('*', async (c, next) => {
     credentials: true,
   });
   return corsMiddleware(c, next);
+});
+
+// ─── Auth Sync Endpoint (Bypass Admin checking for initial signups) ──────────
+app.post('/api/auth/sync', async (c) => {
+  const userId = await getUserIdFromRequest(c.req.raw, c.env);
+  if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+
+  try {
+    const existing = await c.env.DB
+      .prepare('SELECT user_id FROM user_profiles WHERE user_id = ?')
+      .bind(userId)
+      .first();
+
+    if (!existing) {
+      await c.env.DB
+        .prepare('INSERT INTO user_profiles (user_id, tier, subscription_status) VALUES (?, ?, ?)')
+        .bind(userId, 'free', 'active')
+        .run();
+    }
+    return c.json({ success: true });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+  }
 });
 
 // ─── Admin Authorization Middleware ──────────────────────────────────────────

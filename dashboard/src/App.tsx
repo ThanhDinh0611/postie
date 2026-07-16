@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { ClerkProvider, SignedIn, SignedOut, UserButton, useAuth, useUser, SignIn, SignUp, SignOutButton, RedirectToSignIn } from '@clerk/clerk-react';
 import { dark } from '@clerk/themes';
-import { getPages, getPosts, getLinks, generatePost, publishPost, type PageData, type PostData, type LinkData, type GenerateResponse, type PublishResponse } from './api.ts';
+import { getPages, getPosts, getLinks, generatePost, publishPost, syncAuthUser, type PageData, type PostData, type LinkData, type GenerateResponse, type PublishResponse } from './api.ts';
 import PostGenerator from './components/PostGenerator.tsx';
 import PostPreview from './components/PostPreview.tsx';
 import LinkResultCard from './components/LinkResultCard.tsx';
@@ -264,14 +264,17 @@ function AppInner() {
     const token = await getToken();
     if (!token) return;
     try {
-      const [fetchedPages, fetchedPosts, fetchedLinks] = await Promise.all([
-        getPages(token), getPosts(token), getLinks(token),
-      ]);
-      setPages(fetchedPages);
-      setPosts(fetchedPosts);
-      setLinks(fetchedLinks);
+      await syncAuthUser(token);
+      if (isAdmin) {
+        const [fetchedPages, fetchedPosts, fetchedLinks] = await Promise.all([
+          getPages(token), getPosts(token), getLinks(token),
+        ]);
+        setPages(fetchedPages);
+        setPosts(fetchedPosts);
+        setLinks(fetchedLinks);
+      }
     } catch (err) { console.error('Failed to load data:', err); }
-  }, [isSignedIn, getToken]);
+  }, [isSignedIn, getToken, isAdmin]);
 
   useEffect(() => { loadData(); }, [loadData, location.pathname]);
 

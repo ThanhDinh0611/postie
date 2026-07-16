@@ -176,3 +176,12 @@ export async function uploadImage(file: File, token: string): Promise<UploadResp
 export async function getMedia(token: string): Promise<{ fileName: string; url: string }[]> {
   return fetchJson(`${API_BASE}/api/media`, { headers: authHeaders(token) });
 }
+
+// ─── Auth API ────────────────────────────────────────────────────────────────
+
+export async function syncAuthUser(token: string): Promise<void> {
+  await fetchJson<void>(`${API_BASE}/api/auth/sync`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+}
