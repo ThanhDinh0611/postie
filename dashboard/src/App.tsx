@@ -260,10 +260,12 @@ function AppInner() {
   console.debug('Loaded posts:', posts.length);
 
   const loadData = useCallback(async () => {
+    if (!isLoaded) return;
     if (!isSignedIn) {
       setIsRoleLoading(false);
       return;
     }
+    setIsRoleLoading(true);
     const token = await getToken();
     if (!token) {
       setIsRoleLoading(false);
@@ -287,7 +289,7 @@ function AppInner() {
     } finally {
       setIsRoleLoading(false);
     }
-  }, [isSignedIn, getToken]);
+  }, [isLoaded, isSignedIn, getToken]);
 
   useEffect(() => { loadData(); }, [loadData, location.pathname]);
 
