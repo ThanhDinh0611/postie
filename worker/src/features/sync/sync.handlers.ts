@@ -73,8 +73,24 @@ syncRouter.get('/posts/:id/comments', async (c) => {
           existingComments.results?.forEach(r => existingSet.add(r.facebook_comment_id));
         }
 
-        // Optimize: Batch insert new comments
+        // Optimize: Find and prune locally cached comments that have been deleted on Facebook
+        const localComments = await c.env.DB.prepare('SELECT facebook_comment_id FROM post_comments WHERE post_id=?').bind(pid).all<{ facebook_comment_id: string }>();
+        const activeIdsSet = new Set(ids);
+        const toDelete: string[] = [];
+        localComments.results?.forEach(lc => {
+          if (!activeIdsSet.has(lc.facebook_comment_id)) {
+            toDelete.push(lc.facebook_comment_id);
+          }
+        });
+
+        // Optimize: Batch insert new comments & prune deleted ones
         const statements: D1PreparedStatement[] = [];
+        
+        if (toDelete.length > 0) {
+          const deletePh = toDelete.map(() => '?').join(',');
+          statements.push(c.env.DB.prepare(`DELETE FROM post_comments WHERE facebook_comment_id IN (${deletePh})`).bind(...toDelete));
+        }
+
         for (const c2 of fbC) {
           if (!existingSet.has(c2.id)) {
             statements.push(c.env.DB.prepare(`
@@ -239,6 +255,8 @@ syncRouter.post('/webhooks/facebook', async (c) => {
     return c.text('Invalid JSON', 400);
   }
 
+  console.log('Facebook Webhook Received Payload:', JSON.stringify(body));
+
   // Verify it's a page event
   if (body.object !== 'page') {
     return c.text('Not a page event', 200); // Always return 200 to FB to prevent retries
@@ -257,6 +275,7 @@ syncRouter.post('/webhooks/facebook', async (c) => {
       .first<{ id: string; user_id: string }>();
 
     if (!page) {
+      console.log(`Webhook Page Not Found for facebookPageId: ${facebookPageId}`);
       continue; // Page not registered in our system
     }
 
@@ -269,6 +288,8 @@ syncRouter.post('/webhooks/facebook', async (c) => {
 
       const item = val.item; // 'post', 'comment', 'status', 'photo', etc.
       const verb = val.verb; // 'add', 'edited', 'remove', 'hide', etc.
+
+      console.log(`Webhook feed event: item=${item}, verb=${verb}`);
 
       if (item === 'post' || item === 'status' || item === 'photo' || item === 'video') {
         const facebookPostId = val.post_id || val.id;
@@ -293,20 +314,32 @@ syncRouter.post('/webhooks/facebook', async (c) => {
               INSERT INTO posts(id, page_id, facebook_post_id, permalink, message, post_format, status, created_at, published_at, user_id, last_synced_at)
               VALUES(?, ?, ?, ?, ?, 'Post', 'Published', ?, ?, ?, unixepoch())
             `).bind(postId, page.id, facebookPostId, permalink, message, createdTime, createdTime, page.user_id));
+            console.log(`Webhook Add Post Prepared: ${facebookPostId}`);
           }
         } else if (verb === 'edited') {
           const message = val.message || '';
           statements.push(c.env.DB.prepare(`
             UPDATE posts SET message = ?, last_synced_at = unixepoch() WHERE facebook_post_id = ?
           `).bind(message, facebookPostId));
+          console.log(`Webhook Edit Post Prepared: ${facebookPostId}`);
         } else if (verb === 'remove') {
           statements.push(c.env.DB.prepare(`
             UPDATE posts SET status = 'Deleted', last_synced_at = unixepoch() WHERE facebook_post_id = ?
           `).bind(facebookPostId));
+          console.log(`Webhook Remove Post Prepared: ${facebookPostId}`);
         }
       } else if (item === 'comment') {
         const facebookCommentId = val.comment_id || val.id;
-        const facebookPostId = val.post_id;
+        let facebookPostId = val.post_id;
+        
+        // Extract post ID from comment ID prefix if not provided in post_id (often happens on deletes)
+        if (!facebookPostId && facebookCommentId) {
+          const parts = facebookCommentId.split('_');
+          if (parts.length >= 2) {
+            facebookPostId = `${parts[0]}_${parts[1]}`;
+          }
+        }
+
         if (!facebookCommentId || !facebookPostId) continue;
 
         if (verb === 'add') {
@@ -339,6 +372,7 @@ syncRouter.post('/webhooks/facebook', async (c) => {
               statements.push(c.env.DB.prepare(`
                 UPDATE posts SET comments_count = comments_count + 1 WHERE id = ?
               `).bind(post.id));
+              console.log(`Webhook Add Comment Prepared: ${facebookCommentId}`);
             }
           }
         } else if (verb === 'edited') {
@@ -346,22 +380,24 @@ syncRouter.post('/webhooks/facebook', async (c) => {
           statements.push(c.env.DB.prepare(`
             UPDATE post_comments SET message = ? WHERE facebook_comment_id = ?
           `).bind(message, facebookCommentId));
+          console.log(`Webhook Edit Comment Prepared: ${facebookCommentId}`);
         } else if (verb === 'remove') {
-          // Find local post ID first to update comments count
-          const comment = await c.env.DB
-            .prepare('SELECT post_id FROM post_comments WHERE facebook_comment_id = ?')
-            .bind(facebookCommentId)
-            .first<{ post_id: string }>();
+          statements.push(c.env.DB.prepare(`
+            DELETE FROM post_comments WHERE facebook_comment_id = ?
+          `).bind(facebookCommentId));
 
-          if (comment) {
-            statements.push(c.env.DB.prepare(`
-              DELETE FROM post_comments WHERE facebook_comment_id = ?
-            `).bind(facebookCommentId));
+          // Retrieve post ID to decrement comments count
+          const post = await c.env.DB
+            .prepare('SELECT id FROM posts WHERE facebook_post_id = ?')
+            .bind(facebookPostId)
+            .first<{ id: string }>();
 
+          if (post) {
             statements.push(c.env.DB.prepare(`
               UPDATE posts SET comments_count = MAX(0, comments_count - 1) WHERE id = ?
-            `).bind(comment.post_id));
+            `).bind(post.id));
           }
+          console.log(`Webhook Remove Comment Prepared: ${facebookCommentId}`);
         }
       }
     }
@@ -369,7 +405,8 @@ syncRouter.post('/webhooks/facebook', async (c) => {
 
   if (statements.length > 0) {
     try {
-      await c.env.DB.batch(statements);
+      const res = await c.env.DB.batch(statements);
+      console.log('Webhook batch execution results:', JSON.stringify(res));
     } catch (err) {
       console.error('Failed to apply webhook changes batch:', err);
     }
