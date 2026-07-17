@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { getUserIdFromRequest, authorizeFeature } from '../../core/auth.ts';
 import { generatePostContent, generateCommentContent } from '../../core/ai.ts';
 import type { GenerateRequest } from '../../core/ai.ts';
-import { publishPost, buildPermalink, clearFacebookCache, getPostComments, createPostComment } from '../../core/facebook.ts';
+import { publishPost, buildPermalink, clearFacebookCache, getPostComments, createPostComment, deleteFacebookPost, deleteFacebookComment } from '../../core/facebook.ts';
 
 export const postsRouter = new Hono<{ Bindings: Env }>();
 
@@ -331,4 +331,89 @@ postsRouter.post('/posts/:id/comments/generate', async (c) => {
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : 'Comment generation failed' }, 500);
   }
+});
+
+// DELETE /api/posts/:id — Delete a post from Facebook and local D1 database
+postsRouter.delete('/posts/:id', async (c) => {
+  const userId = await getUserIdFromRequest(c.req.raw, c.env);
+  if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+
+  const postId = c.req.param('id');
+  const post = await c.env.DB
+    .prepare('SELECT page_id, facebook_post_id FROM posts WHERE id = ? AND user_id = ?')
+    .bind(postId, userId)
+    .first<{ page_id: string; facebook_post_id: string | null }>();
+
+  if (!post) return c.json({ error: 'Post not found' }, 404);
+
+  // If published on Facebook, attempt to delete it on Facebook
+  if (post.facebook_post_id) {
+    const page = await c.env.DB
+      .prepare('SELECT access_token FROM pages WHERE id = ?')
+      .bind(post.page_id)
+      .first<{ access_token: string }>();
+
+    if (page?.access_token) {
+      try {
+        await deleteFacebookPost(page.access_token, post.facebook_post_id);
+      } catch (err) {
+        console.error(`Failed to delete post ${post.facebook_post_id} from Facebook:`, err);
+      }
+    }
+  }
+
+  // Delete from local database (including cached comments)
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM post_comments WHERE post_id = ?').bind(postId),
+    c.env.DB.prepare('DELETE FROM posts WHERE id = ?').bind(postId),
+  ]);
+
+  return c.json({ success: true });
+});
+
+// DELETE /api/posts/:id/comments/:commentId — Delete a comment from Facebook and local database
+postsRouter.delete('/posts/:id/comments/:commentId', async (c) => {
+  const userId = await getUserIdFromRequest(c.req.raw, c.env);
+  if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+
+  const postId = c.req.param('id');
+  const commentId = c.req.param('commentId');
+
+  // Verify post ownership
+  const post = await c.env.DB
+    .prepare('SELECT page_id, facebook_post_id FROM posts WHERE id = ? AND user_id = ?')
+    .bind(postId, userId)
+    .first<{ page_id: string; facebook_post_id: string | null }>();
+
+  if (!post) return c.json({ error: 'Post not found' }, 404);
+
+  // Find the comment record
+  const comment = await c.env.DB
+    .prepare('SELECT facebook_comment_id FROM post_comments WHERE id = ? AND post_id = ?')
+    .bind(commentId, postId)
+    .first<{ facebook_comment_id: string }>();
+
+  if (!comment) return c.json({ error: 'Comment not found' }, 404);
+
+  const page = await c.env.DB
+    .prepare('SELECT access_token FROM pages WHERE id = ?')
+    .bind(post.page_id)
+    .first<{ access_token: string }>();
+
+  if (!page) return c.json({ error: 'Page not found' }, 404);
+
+  // Delete comment from Facebook
+  try {
+    await deleteFacebookComment(page.access_token, comment.facebook_comment_id);
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : 'Failed to delete comment from Facebook' }, 500);
+  }
+
+  // Delete comment from local DB and decrement comments count
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM post_comments WHERE id = ?').bind(commentId),
+    c.env.DB.prepare('UPDATE posts SET comments_count = MAX(0, comments_count - 1) WHERE id = ?').bind(postId),
+  ]);
+
+  return c.json({ success: true });
 });

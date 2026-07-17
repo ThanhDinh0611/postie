@@ -7,6 +7,8 @@ import {
   createPostComment,
   generateComment,
   uploadImage,
+  deletePost,
+  deletePostComment,
   type PostData,
   type CampaignData,
   type PageData,
@@ -177,6 +179,36 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
       addToast(`Lỗi tạo bình luận AI: ${err instanceof Error ? err.message : String(err)}`, 'error');
     } finally {
       setGeneratingComment(false);
+    }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa bài viết này khỏi Facebook và hệ thống?")) return;
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      await deletePost(postId, token);
+      addToast('Đã xóa bài viết thành công!', 'success');
+      if (onRefresh) {
+        onRefresh();
+      }
+    } catch (err) {
+      addToast(`Lỗi xóa bài viết: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    }
+  };
+
+  const handleDeleteComment = async (postId: string, commentId: string) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa bình luận này trên Facebook?")) return;
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      await deletePostComment(postId, commentId, token);
+      addToast('Đã xóa bình luận thành công!', 'success');
+      fetchComments(postId);
+    } catch (err) {
+      addToast(`Lỗi xóa bình luận: ${err instanceof Error ? err.message : String(err)}`, 'error');
     }
   };
 
@@ -387,6 +419,13 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
                         💬 {expandedPostId === post.id ? 'Đóng' : 'Bình luận'}
                       </button>
                     )}
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => handleDeletePost(post.id)}
+                      style={{ color: '#ef4444', borderColor: '#ef4444' }}
+                    >
+                      🗑️ Xóa
+                    </button>
                   </div>
                 ) : null}
               </div>
@@ -415,11 +454,28 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
                         <div key={c.id} className="comment-item">
                           <div className="comment-header">
                             <span className="comment-author">👤 {c.from_name || 'Người dùng Facebook'}</span>
-                            {c.created_time && (
-                              <span className="comment-date">
-                                {new Date(c.created_time * 1000).toLocaleString('vi-VN')}
-                              </span>
-                            )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              {c.created_time && (
+                                <span className="comment-date">
+                                  {new Date(c.created_time * 1000).toLocaleString('vi-VN')}
+                                </span>
+                              )}
+                              <button
+                                onClick={() => handleDeleteComment(post.id, c.id)}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  color: '#ef4444',
+                                  cursor: 'pointer',
+                                  fontSize: '0.8rem',
+                                  padding: '2px 4px',
+                                  marginLeft: '0.2rem'
+                                }}
+                                title="Xóa bình luận"
+                              >
+                                🗑️
+                              </button>
+                            </div>
                           </div>
                           <div className="comment-content">{c.message}</div>
                         </div>

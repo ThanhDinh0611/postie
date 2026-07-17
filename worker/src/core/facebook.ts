@@ -330,3 +330,31 @@ export async function subscribePageToApp(pageAccessToken: string, facebookPageId
   const result = await res.json() as { success?: boolean };
   return !!result.success;
 }
+
+/**
+ * Delete a post from Facebook.
+ */
+export async function deleteFacebookPost(pageAccessToken: string, facebookPostId: string): Promise<boolean> {
+  const url = `${GRAPH_API_BASE}/${facebookPostId}?access_token=${pageAccessToken}`;
+  const res = await fetch(url, { method: 'DELETE' });
+  if (!res.ok) {
+    console.error(`Failed to delete Facebook post ${facebookPostId}:`, await res.text());
+    return false;
+  }
+  const result = await res.json() as { success?: boolean };
+  return !!result.success;
+}
+
+/**
+ * Delete a comment from Facebook.
+ */
+export async function deleteFacebookComment(pageAccessToken: string, facebookCommentId: string): Promise<boolean> {
+  const url = `${GRAPH_API_BASE}/${facebookCommentId}?access_token=${pageAccessToken}`;
+  const res = await fetch(url, { method: 'DELETE' });
+  if (!res.ok) {
+    console.error(`Failed to delete Facebook comment ${facebookCommentId}:`, await res.text());
+    return false;
+  }
+  const result = await res.json() as { success?: boolean };
+  return !!result.success;
+}

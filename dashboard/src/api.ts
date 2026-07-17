@@ -413,3 +413,17 @@ export async function generateComment(
     body: JSON.stringify(params),
   });
 }
+
+export async function deletePost(postId: string, token: string): Promise<{ success: boolean }> {
+  return fetchJson<{ success: boolean }>(`${API_BASE}/api/posts/${postId}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+}
+
+export async function deletePostComment(postId: string, commentId: string, token: string): Promise<{ success: boolean }> {
+  return fetchJson<{ success: boolean }>(`${API_BASE}/api/posts/${postId}/comments/${commentId}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+}
