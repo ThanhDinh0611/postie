@@ -2,13 +2,18 @@ import { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { ClerkProvider, SignedIn, SignedOut, UserButton, useAuth, useUser, SignIn, SignUp, SignOutButton, RedirectToSignIn, AuthenticateWithRedirectCallback } from '@clerk/clerk-react';
 import { dark } from '@clerk/themes';
-import { getPages, getPosts, getLinks, generatePost, publishPost, syncAuthUser, type PageData, type PostData, type LinkData, type GenerateResponse, type PublishResponse } from './api.ts';
+import {
+  getPages, getPosts, generatePost, publishPost, syncAuthUser, getCampaigns,
+  type PageData, type PostData, type GenerateResponse, type PublishResponse, type CampaignData
+} from './api.ts';
 import PostGenerator from './components/PostGenerator.tsx';
 import PostPreview from './components/PostPreview.tsx';
 import LinkResultCard from './components/LinkResultCard.tsx';
 import PublishModal from './components/PublishModal.tsx';
 import PostHistory from './components/PostHistory.tsx';
 import PagesManager from './components/PagesManager.tsx';
+import CampaignsManager from './components/CampaignsManager.tsx';
+import SyncDashboard from './components/SyncDashboard.tsx';
 
 const CLERK_PUBLISHABLE_KEY = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string || '').trim();
 
@@ -20,9 +25,9 @@ function NavBar({ isAdmin }: { isAdmin: boolean }) {
 
   const navLinks = isAdmin ? [
     { to: '/', label: '🏠 Tạo bài viết', exact: true },
+    { to: '/analytics', label: '📊 Phân tích' },
     { to: '/history', label: '📝 Lịch sử' },
-    { to: '/links', label: '🔗 Link của tôi' },
-    { to: '/pages', label: '📋 Trang Facebook' },
+    { to: '/pages', label: '📋 Trang & Chiến dịch' },
   ] : [];
 
   return (
@@ -56,7 +61,7 @@ function NavBar({ isAdmin }: { isAdmin: boolean }) {
 
 // ─── Page Components ─────────────────────────────────────────────────────────
 
-function HomePage({ pages, onDataChange }: { pages: PageData[]; onDataChange?: () => void }) {
+function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campaigns: CampaignData[]; onDataChange?: () => void }) {
   const { getToken } = useAuth();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -65,6 +70,7 @@ function HomePage({ pages, onDataChange }: { pages: PageData[]; onDataChange?: (
   const [generationResult, setGenerationResult] = useState<GenerateResponse | null>(null);
   const [publishResult, setPublishResult] = useState<PublishResponse | null>(null);
   const [selectedPageId, setSelectedPageId] = useState('');
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | undefined>(undefined);
 
   // Set default active page
   useEffect(() => {
@@ -81,9 +87,11 @@ function HomePage({ pages, onDataChange }: { pages: PageData[]; onDataChange?: (
     formula: string;
     tone: string;
     postFormat: 'Post' | 'Reel' | 'Video';
+    campaignId?: string;
   }) => {
     setIsGenerating(true);
     setPublishResult(null);
+    setSelectedCampaignId(data.campaignId);
     try {
       const token = await getToken();
       if (!token) throw new Error('Unauthorized');
@@ -125,6 +133,8 @@ function HomePage({ pages, onDataChange }: { pages: PageData[]; onDataChange?: (
         formula: generationResult?.formulaApplied,
         tone: generationResult?.tone ?? undefined,
         scheduledAt,
+        campaignId: selectedCampaignId,
+        generationId: generationResult?.generationId ?? undefined,
       }, token);
       setPublishResult(result);
       setShowPublishModal(false);
@@ -139,6 +149,7 @@ function HomePage({ pages, onDataChange }: { pages: PageData[]; onDataChange?: (
   const handleReset = () => {
     setGenerationResult(null);
     setPublishResult(null);
+    setSelectedCampaignId(undefined);
   };
 
   return (
@@ -166,7 +177,7 @@ function HomePage({ pages, onDataChange }: { pages: PageData[]; onDataChange?: (
         />
       ) : (
         <div className="generator-grid">
-          <PostGenerator onGenerate={handleGenerate} isGenerating={isGenerating} />
+          <PostGenerator campaigns={campaigns} onGenerate={handleGenerate} isGenerating={isGenerating} />
           {generationResult ? (
             <PostPreview
               content={generationResult.content}
@@ -187,44 +198,41 @@ function HomePage({ pages, onDataChange }: { pages: PageData[]; onDataChange?: (
   );
 }
 
-function LinksPage({ links }: { links: LinkData[] }) {
-  return (
-    <div className="container">
-      <div style={{ height: 24 }} />
-      <h2>🔗 Link của tôi</h2>
-      <p className="text-muted">Danh sách link bài viết đã đăng.</p>
-      {links.length === 0 ? (
-        <div className="placeholder-card">
-          <p>Chưa có bài viết nào được đăng. Tạo bài mới và đăng lên fanpage!</p>
-        </div>
-      ) : (
-        <div className="link-list">
-          {links.map((link) => (
-            <div key={link.id} className="link-item">
-              <div className="link-message">{link.message.slice(0, 100)}...</div>
-              <div className="link-meta">
-                <span>{link.page_name}</span>
-                <span className="badge">{link.status}</span>
-              </div>
-              <a href={link.permalink ?? '#'} target="_blank" rel="noopener noreferrer" className="btn btn-sm">
-                🔗 Mở link
-              </a>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
-function PagesPage({ pages, onPagesChange }: { pages: PageData[]; onPagesChange?: (pages: PageData[]) => void }) {
+function PagesPage({
+  pages,
+  campaigns,
+  onPagesChange,
+  onCampaignsChange
+}: {
+  pages: PageData[];
+  campaigns: CampaignData[];
+  onPagesChange?: (pages: PageData[]) => void;
+  onCampaignsChange?: (campaigns: CampaignData[]) => void;
+}) {
+  const [activeSubTab, setActiveSubTab] = useState<'pages' | 'campaigns'>('pages');
+
   return (
     <div className="container">
       <div style={{ height: 24 }} />
-      <h2>📋 Trang Facebook</h2>
-      <p className="text-muted">Quản lý các trang Facebook đã kết nối.</p>
-      <div style={{ marginTop: '1.5rem' }}>
-        <PagesManager initialPages={pages} onPagesChange={onPagesChange} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <h2>📋 Quản lý Fanpage & Chiến dịch</h2>
+        <div style={{ display: 'flex', gap: '0.4rem' }}>
+          <button className={`btn btn-sm ${activeSubTab === 'pages' ? 'btn-primary' : ''}`} onClick={() => setActiveSubTab('pages')}>
+            Facebook Pages
+          </button>
+          <button className={`btn btn-sm ${activeSubTab === 'campaigns' ? 'btn-primary' : ''}`} onClick={() => setActiveSubTab('campaigns')}>
+            Chiến dịch (Campaigns)
+          </button>
+        </div>
+      </div>
+      
+      <div style={{ marginTop: '1rem' }}>
+        {activeSubTab === 'pages' ? (
+          <PagesManager initialPages={pages} onPagesChange={onPagesChange} />
+        ) : (
+          <CampaignsManager initialCampaigns={campaigns} onCampaignsChange={onCampaignsChange} />
+        )}
       </div>
     </div>
   );
@@ -267,7 +275,7 @@ function AdminRequiredPage() {
 function AppInner() {
   const [pages, setPages] = useState<PageData[]>([]);
   const [posts, setPosts] = useState<PostData[]>([]);
-  const [links, setLinks] = useState<LinkData[]>([]);
+  const [campaigns, setCampaigns] = useState<CampaignData[]>([]);
   const { isSignedIn, getToken } = useAuth();
   const { isLoaded } = useUser();
   const [isAdmin, setIsAdmin] = useState(false);
@@ -293,12 +301,12 @@ function AppInner() {
       setIsAdmin(isUserAdmin);
 
       if (isUserAdmin) {
-        const [fetchedPages, fetchedPosts, fetchedLinks] = await Promise.all([
-          getPages(token), getPosts(token), getLinks(token),
+        const [fetchedPages, fetchedPosts, fetchedCampaigns] = await Promise.all([
+          getPages(token), getPosts(token), getCampaigns(token)
         ]);
         setPages(fetchedPages);
         setPosts(fetchedPosts);
-        setLinks(fetchedLinks);
+        setCampaigns(fetchedCampaigns);
       }
     } catch (err) {
       console.error('Failed to load data:', err);
@@ -341,7 +349,7 @@ function AppInner() {
                   </div>
                 </SignedOut>
                 <SignedIn>
-                  {isAdmin ? <HomePage pages={pages} onDataChange={loadData} /> : <AdminRequiredPage />}
+                  {isAdmin ? <HomePage pages={pages} campaigns={campaigns} onDataChange={loadData} /> : <AdminRequiredPage />}
                 </SignedIn>
               </>
             }
@@ -358,23 +366,10 @@ function AppInner() {
                       <h2>📝 Lịch sử đăng bài</h2>
                       <p className="text-muted">Quản lý các bài viết và link đã tạo.</p>
                       <div style={{ marginTop: '1.5rem' }}>
-                        <PostHistory initialPosts={posts} initialLinks={links} onRefresh={loadData} />
+                        <PostHistory initialPosts={posts} pages={pages} campaigns={campaigns} onRefresh={loadData} />
                       </div>
                     </div>
                   ) : <AdminRequiredPage />}
-                </SignedIn>
-                <SignedOut>
-                  <RedirectToSignIn />
-                </SignedOut>
-              </>
-            }
-          />
-          <Route
-            path="/links"
-            element={
-              <>
-                <SignedIn>
-                  {isAdmin ? <LinksPage links={links} /> : <AdminRequiredPage />}
                 </SignedIn>
                 <SignedOut>
                   <RedirectToSignIn />
@@ -387,7 +382,32 @@ function AppInner() {
             element={
               <>
                 <SignedIn>
-                  {isAdmin ? <PagesPage pages={pages} onPagesChange={() => { loadData(); }} /> : <AdminRequiredPage />}
+                  {isAdmin ? (
+                    <PagesPage
+                      pages={pages}
+                      campaigns={campaigns}
+                      onPagesChange={() => loadData()}
+                      onCampaignsChange={() => loadData()}
+                    />
+                  ) : <AdminRequiredPage />}
+                </SignedIn>
+                <SignedOut>
+                  <RedirectToSignIn />
+                </SignedOut>
+              </>
+            }
+          />
+          <Route
+            path="/analytics"
+            element={
+              <>
+                <SignedIn>
+                  {isAdmin ? (
+                    <div className="container">
+                      <div style={{ height: 24 }} />
+                      <SyncDashboard onDataChange={loadData} />
+                    </div>
+                  ) : <AdminRequiredPage />}
                 </SignedIn>
                 <SignedOut>
                   <RedirectToSignIn />

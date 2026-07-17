@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { CampaignData } from '../api.ts';
 
 export const HOOK_OPTIONS = [
   '1. Sự thật thú vị (Interesting fact)',
@@ -23,27 +24,37 @@ export const FORMULA_OPTIONS = [
 export const TONE_OPTIONS = ['Friendly', 'Professional', 'Humorous', 'Curious', 'Formal'];
 
 interface PostGeneratorProps {
+  campaigns?: CampaignData[];
   onGenerate: (data: {
     topic: string;
     hookType: string;
     formula: string;
     tone: string;
     postFormat: 'Post' | 'Reel' | 'Video';
+    campaignId?: string;
   }) => void;
   isGenerating: boolean;
 }
 
-export default function PostGenerator({ onGenerate, isGenerating }: PostGeneratorProps) {
+export default function PostGenerator({ campaigns = [], onGenerate, isGenerating }: PostGeneratorProps) {
   const [topic, setTopic] = useState('');
   const [hookType, setHookType] = useState(HOOK_OPTIONS[0]!);
   const [formula, setFormula] = useState(FORMULA_OPTIONS[0]!);
   const [tone, setTone] = useState(TONE_OPTIONS[0]!);
   const [postFormat, setPostFormat] = useState<'Post' | 'Reel' | 'Video'>('Post');
+  const [campaignId, setCampaignId] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!topic.trim()) return;
-    onGenerate({ topic, hookType, formula, tone, postFormat });
+    onGenerate({
+      topic,
+      hookType,
+      formula,
+      tone,
+      postFormat,
+      campaignId: campaignId || undefined
+    });
   };
 
   return (
@@ -61,6 +72,23 @@ export default function PostGenerator({ onGenerate, isGenerating }: PostGenerato
             disabled={isGenerating}
             required
           />
+        </div>
+
+        {/* Campaign selector */}
+        <div className="form-group">
+          <label htmlFor="campaign">Chiến dịch tiếp thị (Campaign)</label>
+          <select
+            id="campaign"
+            className="form-control"
+            value={campaignId}
+            onChange={(e) => setCampaignId(e.target.value)}
+            disabled={isGenerating}
+          >
+            <option value="">-- Không chọn chiến dịch --</option>
+            {campaigns.map(c => (
+              <option key={c.id} value={c.id}>{c.title}</option>
+            ))}
+          </select>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>

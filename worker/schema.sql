@@ -14,6 +14,15 @@ CREATE TABLE IF NOT EXISTS pages (
   updated_at       INTEGER DEFAULT (unixepoch())
 );
 
+CREATE TABLE IF NOT EXISTS campaigns (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL,
+  title       TEXT NOT NULL,
+  description TEXT,
+  color       TEXT DEFAULT '#3b82f6',
+  created_at  INTEGER DEFAULT (unixepoch())
+);
+
 CREATE TABLE IF NOT EXISTS posts (
   id                TEXT PRIMARY KEY,
   page_id           TEXT NOT NULL REFERENCES pages(id),
@@ -29,7 +38,15 @@ CREATE TABLE IF NOT EXISTS posts (
   scheduled_for     INTEGER,
   created_at        INTEGER DEFAULT (unixepoch()),
   published_at      INTEGER,
-  user_id           TEXT NOT NULL
+  user_id           TEXT NOT NULL,
+  campaign_id       TEXT REFERENCES campaigns(id) ON DELETE SET NULL,
+  generation_id     TEXT REFERENCES generations(id) ON DELETE SET NULL,
+  likes             INTEGER DEFAULT 0,
+  comments_count    INTEGER DEFAULT 0,
+  shares            INTEGER DEFAULT 0,
+  views             INTEGER DEFAULT 0,
+  engagement_fetched_at INTEGER,
+  last_synced_at    INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS post_variants (
@@ -87,3 +104,50 @@ CREATE INDEX IF NOT EXISTS idx_generations_user_id ON generations(user_id);
 CREATE INDEX IF NOT EXISTS idx_generations_created_at ON generations(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
+
+-- Post Sync & Engagement Tables (added in migration 0002)
+CREATE TABLE IF NOT EXISTS post_engagement (
+  id               TEXT PRIMARY KEY,
+  post_id          TEXT NOT NULL REFERENCES posts(id),
+  likes            INTEGER DEFAULT 0,
+  comments_count   INTEGER DEFAULT 0,
+  shares           INTEGER DEFAULT 0,
+  views            INTEGER DEFAULT 0,
+  fetched_at       INTEGER DEFAULT (unixepoch())
+);
+
+CREATE TABLE IF NOT EXISTS post_comments (
+  id                 TEXT PRIMARY KEY,
+  facebook_comment_id TEXT NOT NULL,
+  post_id            TEXT NOT NULL REFERENCES posts(id),
+  from_name          TEXT,
+  from_id            TEXT,
+  message            TEXT NOT NULL,
+  like_count         INTEGER DEFAULT 0,
+  created_time       INTEGER,
+  parent_id          TEXT,
+  fetched_at         INTEGER DEFAULT (unixepoch())
+);
+
+CREATE INDEX IF NOT EXISTS idx_post_engagement_post_id ON post_engagement(post_id);
+CREATE INDEX IF NOT EXISTS idx_post_comments_post_id ON post_comments(post_id);
+CREATE INDEX IF NOT EXISTS idx_post_comments_facebook_id ON post_comments(facebook_comment_id);
+CREATE INDEX IF NOT EXISTS idx_posts_last_synced ON posts(last_synced_at DESC);
+CREATE INDEX IF NOT EXISTS idx_posts_facebook_id ON posts(facebook_post_id);
+
+CREATE TABLE IF NOT EXISTS page_analyses (
+  id               TEXT PRIMARY KEY,
+  page_id          TEXT NOT NULL REFERENCES pages(id),
+  user_id          TEXT NOT NULL,
+  analyzed_at      INTEGER DEFAULT (unixepoch()),
+  summary          TEXT NOT NULL,
+  writing_style    TEXT NOT NULL,
+  suggestions      TEXT NOT NULL, -- JSON array
+  charts_data      TEXT NOT NULL, -- JSON object
+  metrics_summary  TEXT NOT NULL  -- JSON object
+);
+
+CREATE INDEX IF NOT EXISTS idx_posts_campaign_id ON posts(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_posts_generation_id ON posts(generation_id);
+CREATE INDEX IF NOT EXISTS idx_page_analyses_page_id ON page_analyses(page_id);
+CREATE INDEX IF NOT EXISTS idx_page_analyses_analyzed_at ON page_analyses(analyzed_at DESC);

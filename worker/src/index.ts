@@ -3,9 +3,10 @@ import { cors } from 'hono/cors';
 import { isAdminRequest, getUserIdFromRequest } from './core/auth.ts';
 import { pagesRouter } from './features/pages/pages.handlers.ts';
 import { postsRouter } from './features/posts/posts.handlers.ts';
-import { linksRouter } from './features/links/links.handlers.ts';
 import { mediaRouter } from './features/media/media.handlers.ts';
 import { billingRouter } from './features/billing/billing.handlers.ts';
+import { syncRouter } from './features/sync/sync.handlers.ts';
+import { campaignsRouter } from './features/campaigns/campaigns.handlers.ts';
 
 // ─── Global Env Type ──────────────────────────────────────────────────────────
 declare global {
@@ -83,8 +84,9 @@ app.get('/', (c) => c.json({ status: 'ok', service: 'postie-worker' }));
 // ─── Mount Feature Slice Routes ───────────────────────────────────────────────
 app.route('/api', pagesRouter);
 app.route('/api', postsRouter);
-app.route('/api', linksRouter);
 app.route('/api', mediaRouter);
 app.route('/api', billingRouter);
+app.route('/api', syncRouter);
+app.route('/api', campaignsRouter);
 
 export default app;

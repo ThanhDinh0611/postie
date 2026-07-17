@@ -17,6 +17,29 @@ export interface FacebookPostResult {
   created_time?: string;
 }
 
+export interface FacebookPostInfo {
+  id: string;
+  message?: string;
+  created_time?: string;
+  permalink_url?: string;
+}
+
+export interface FacebookComment {
+  id: string;
+  from?: { name: string; id: string };
+  message?: string;
+  like_count?: number;
+  created_time?: string;
+  comments?: { data: FacebookComment[] };
+}
+
+export interface FacebookEngagement {
+  likes: number;
+  comments: number;
+  shares: number;
+  views: number;
+}
+
 /**
  * Exchange OAuth code for a long-lived user access token.
  */
@@ -98,26 +121,142 @@ export async function publishPost(
 }
 
 /**
- * Get post engagement metrics.
+ * Get post engagement metrics with views support.
  */
-export async function getPostInsights(
+export async function getPostEngagement(
   pageAccessToken: string,
   facebookPostId: string,
-): Promise<{ likes: number; comments: number; shares: number; views: number }> {
-  const url = `${GRAPH_API_BASE}/${facebookPostId}?fields=likes.summary(true),comments.summary(true),shares&access_token=${pageAccessToken}`;
+): Promise<FacebookEngagement> {
+  const url = `${GRAPH_API_BASE}/${facebookPostId}?fields=likes.summary(true),comments.summary(true),shares,insights.metric(post_impressions,post_impressions_unique)&access_token=${pageAccessToken}`;
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to fetch post insights: ${res.status}`);
+  if (!res.ok) throw new Error(`Failed to fetch post engagement: ${res.status}`);
   const data = (await res.json()) as {
     likes?: { summary?: { total_count: number } };
     comments?: { summary?: { total_count: number } };
     shares?: { count: number };
+    insights?: { data: Array<{ name: string; values: Array<{ value: number }> }> };
   };
+
+  let views = 0;
+  if (data.insights?.data) {
+    const impressions = data.insights.data.find((i) => i.name === 'post_impressions');
+    if (impressions?.values?.[0]) views = impressions.values[0].value;
+  }
+
   return {
     likes: data.likes?.summary?.total_count ?? 0,
     comments: data.comments?.summary?.total_count ?? 0,
     shares: data.shares?.count ?? 0,
-    views: 0, // requires `insights` edge
+    views,
   };
+}
+
+/**
+ * Batch fetch engagement for multiple posts using Facebook's Batch API.
+ * This collapses N subrequests into 1, staying well under Cloudflare's limit.
+ * Max 50 operations per batch per Facebook's spec.
+ */
+export async function batchGetPostEngagements(
+  pageAccessToken: string,
+  facebookPostIds: string[],
+): Promise<Map<string, FacebookEngagement>> {
+  const results = new Map<string, FacebookEngagement>();
+
+  if (facebookPostIds.length === 0) return results;
+
+  // Build batch operations — max 50 per batch
+  const batchSize = 50;
+  for (let i = 0; i < facebookPostIds.length; i += batchSize) {
+    const chunk = facebookPostIds.slice(i, i + batchSize);
+    const batch = chunk.map((postId) => ({
+      method: 'GET' as const,
+      relative_url: `${postId}?fields=likes.summary(true),comments.summary(true),shares,insights.metric(post_impressions)`,
+    }));
+
+    const url = `${GRAPH_API_BASE}/?access_token=${pageAccessToken}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batch }),
+    });
+
+    if (!res.ok) {
+      console.error(`Batch engagement fetch failed: ${res.status}`);
+      continue; // Skip this batch, return partial results
+    }
+
+    const data = (await res.json()) as Array<{
+      code: number;
+      body: string;
+    }>;
+
+    for (let j = 0; j < data.length; j++) {
+      const item = data[j];
+      const postId = chunk[j];
+      if (!item || !postId) continue;
+
+      if (item.code !== 200) {
+        results.set(postId, { likes: 0, comments: 0, shares: 0, views: 0 });
+        continue;
+      }
+
+      try {
+        const body = JSON.parse(item.body) as {
+          likes?: { summary?: { total_count: number } };
+          comments?: { summary?: { total_count: number } };
+          shares?: { count: number };
+          insights?: { data: Array<{ name: string; values: Array<{ value: number }> }> };
+        };
+
+        let views = 0;
+        if (body.insights?.data) {
+          const imp = body.insights.data.find((x) => x.name === 'post_impressions');
+          if (imp?.values?.[0]) views = imp.values[0].value;
+        }
+
+        results.set(postId, {
+          likes: body.likes?.summary?.total_count ?? 0,
+          comments: body.comments?.summary?.total_count ?? 0,
+          shares: body.shares?.count ?? 0,
+          views,
+        });
+      } catch {
+        results.set(postId, { likes: 0, comments: 0, shares: 0, views: 0 });
+      }
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Fetch posts from a Facebook page timeline.
+ */
+export async function getPagePosts(
+  pageAccessToken: string,
+  pageId: string,
+  limit = 100,
+): Promise<FacebookPostInfo[]> {
+  const url = `${GRAPH_API_BASE}/${pageId}/posts?fields=id,message,created_time,permalink_url&limit=${limit}&access_token=${pageAccessToken}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch page posts: ${res.status}`);
+  const data = (await res.json()) as { data: FacebookPostInfo[] };
+  return data.data ?? [];
+}
+
+/**
+ * Fetch comments for a Facebook post.
+ */
+export async function getPostComments(
+  pageAccessToken: string,
+  facebookPostId: string,
+  limit = 100,
+): Promise<FacebookComment[]> {
+  const url = `${GRAPH_API_BASE}/${facebookPostId}/comments?fields=from,message,like_count,created_time,comments{from,message,like_count,created_time}&limit=${limit}&access_token=${pageAccessToken}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch post comments: ${res.status}`);
+  const data = (await res.json()) as { data: FacebookComment[] };
+  return data.data ?? [];
 }
 
 /**

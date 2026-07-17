@@ -135,6 +135,10 @@ postie/
 | `POST` | `/api/media/upload` | Yes | Upload image to R2 |
 | `GET` | `/api/media` | Yes | List user's uploaded images |
 | `GET` | `/api/billing/status` | Yes | Get subscription status |
+| `POST` | `/api/sync/posts` | Yes | Sync all posts from connected Facebook pages |
+| `GET` | `/api/sync/status` | Yes | Get sync status & aggregate engagement stats |
+| `GET` | `/api/posts/:id/engagement` | Yes | Get engagement data for a specific post |
+| `GET` | `/api/posts/:id/comments` | Yes | Get synced comments for a post |
 
 ---
 
@@ -167,9 +171,10 @@ postie/
 | **P1: Foundation** | 🟢 Completed | 2026-07-16 | 2026-07-16 |
 | **P2: AI Post Gen** | 🟢 Completed | 2026-07-16 | 2026-07-16 |
 | **P3: Publish + Links** | 🟢 Completed | 2026-07-16 | 2026-07-16 |
-| **P4: Dashboard** | 🟡 In progress | 2026-07-16 | — |
+| **P4: Dashboard** | 🟢 Completed | 2026-07-16 | 2026-07-16 |
 | **P5: Reel Generation** | 🔴 Not started | — | — |
 | **P6: Billing & Polish** | 🔴 Not started | — | — |
+| **P7: Post Sync & Analytics** | 🟢 Completed | 2026-07-16 | 2026-07-16 |
 
 ---
 
