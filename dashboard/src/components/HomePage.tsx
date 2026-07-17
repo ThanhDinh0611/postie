@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import {
   generatePost,
@@ -45,8 +45,6 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
   const [publishMediaUrl, setPublishMediaUrl] = useState<string | undefined>(undefined);
   const [publishResult, setPublishResult] = useState<PublishResponse | null>(null);
 
-  const loadedPageIdRef = useRef(selectedPageId);
-
   // Set default active page
   useEffect(() => {
     if (pages.length > 0 && !selectedPageId) {
@@ -56,17 +54,11 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
     }
   }, [pages, selectedPageId]);
 
-  // Load draft from localStorage when page selection changes
+  // Load draft from localStorage on mount
   useEffect(() => {
-    if (!selectedPageId) return;
-    const key = `postie_draft_page_${selectedPageId}`;
+    const key = 'postie_global_draft';
     const stored = localStorage.getItem(key);
     
-    // Always clear the preview card when changing selected page to prevent cross-page publishing errors
-    setGenerationResult(null);
-    setAttachedImage(null);
-    setAttachedFile(null);
-
     if (stored) {
       try {
         const data = JSON.parse(stored);
@@ -76,29 +68,25 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
         setTone(data.tone ?? 'Friendly');
         setPostFormat(data.postFormat ?? 'Post');
         setSelectedCampaignId(data.campaignId ?? '');
+        setGenerationResult(data.generationResult ?? null);
+        
+        // Clean temporary blob URLs on load since local URLs expire on browser refresh
+        const img = data.attachedImage ?? null;
+        if (img && img.startsWith('blob:')) {
+          setAttachedImage(null);
+          setAttachedFile(null);
+        } else {
+          setAttachedImage(img);
+        }
       } catch (err) {
         console.error('Failed to parse draft from localStorage:', err);
       }
-    } else {
-      // Clear/Reset to defaults for a page with no draft
-      setTopic('');
-      setHookType('1. Sự thật thú vị (Interesting fact)');
-      setFormula('PAS (Problem-Agitation-Solution)');
-      setTone('Friendly');
-      setPostFormat('Post');
-      setSelectedCampaignId('');
     }
-    
-    // Mark that this page ID's states have been loaded/synchronized
-    loadedPageIdRef.current = selectedPageId;
-  }, [selectedPageId]);
+  }, []);
 
   // Save draft to localStorage when states change
   useEffect(() => {
-    // Only save if selectedPageId matches the loaded page state (prevents saving old states to the new page ID during transition)
-    if (!selectedPageId || loadedPageIdRef.current !== selectedPageId) return;
-    
-    const key = `postie_draft_page_${selectedPageId}`;
+    const key = 'postie_global_draft';
     const data = {
       topic,
       hookType,
@@ -110,7 +98,7 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
       attachedImage: attachedImage && !attachedImage.startsWith('blob:') ? attachedImage : null
     };
     localStorage.setItem(key, JSON.stringify(data));
-  }, [selectedPageId, topic, hookType, formula, tone, postFormat, selectedCampaignId, generationResult, attachedImage]);
+  }, [topic, hookType, formula, tone, postFormat, selectedCampaignId, generationResult, attachedImage]);
 
   const handleGenerate = async (data: {
     topic: string;
@@ -180,9 +168,7 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
       setAttachedImage(null);
       setAttachedFile(null);
       setTopic('');
-      if (selectedPageId) {
-        localStorage.removeItem(`postie_draft_page_${selectedPageId}`);
-      }
+      localStorage.removeItem('postie_global_draft');
 
       setPublishResult(result);
       setShowPublishModal(false);
@@ -201,9 +187,7 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
     setAttachedFile(null);
     setPublishMediaUrl(undefined);
     setTopic('');
-    if (selectedPageId) {
-      localStorage.removeItem(`postie_draft_page_${selectedPageId}`);
-    }
+    localStorage.removeItem('postie_global_draft');
   };
 
   return (
