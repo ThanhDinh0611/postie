@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { compressImage } from '../utils/image.ts';
 import type { CampaignData } from '../api.ts';
 
 export const HOOK_OPTIONS = [
@@ -47,6 +49,16 @@ interface PostGeneratorProps {
   setPostFormat: (val: 'Post' | 'Reel' | 'Video') => void;
   campaignId: string;
   setCampaignId: (val: string) => void;
+
+  // Publish Format & File Props
+  publishType: 'image' | 'link';
+  setPublishType: (val: 'image' | 'link') => void;
+  targetUrl: string;
+  setTargetUrl: (val: string) => void;
+  attachedFile: File | null;
+  setAttachedFile: (file: File | null) => void;
+  attachedImage: string | null;
+  setAttachedImage: (url: string | null) => void;
 }
 
 export default function PostGenerator({
@@ -64,8 +76,17 @@ export default function PostGenerator({
   postFormat,
   setPostFormat,
   campaignId,
-  setCampaignId
+  setCampaignId,
+  publishType,
+  setPublishType,
+  targetUrl,
+  setTargetUrl,
+  attachedFile,
+  setAttachedFile,
+  attachedImage,
+  setAttachedImage
 }: PostGeneratorProps) {
+  const [isCompressing, setIsCompressing] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,6 +99,28 @@ export default function PostGenerator({
       postFormat,
       campaignId: campaignId || undefined
     });
+  };
+
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsCompressing(true);
+    try {
+      const compressedFile = await compressImage(file);
+      setAttachedFile(compressedFile);
+      const localUrl = URL.createObjectURL(compressedFile);
+      setAttachedImage(localUrl);
+    } catch (err) {
+      alert('⚠️ Lỗi nén ảnh: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsCompressing(false);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setAttachedImage(null);
+    setAttachedFile(null);
   };
 
   return (
@@ -96,6 +139,55 @@ export default function PostGenerator({
             required
           />
         </div>
+
+        {/* Publish Type selector */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '1rem' }}>
+          <div className="form-group">
+            <label htmlFor="publishType">Định dạng xuất bản</label>
+            <select
+              id="publishType"
+              className="form-control"
+              value={publishType}
+              onChange={(e) => setPublishType(e.target.value as 'image' | 'link')}
+              disabled={isGenerating}
+            >
+              <option value="image">🖼️ Đăng kèm hình ảnh (Image)</option>
+              <option value="link">🔗 Đăng kèm link Clipy (Link)</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="tone">Giọng điệu (Tone)</label>
+            <select
+              id="tone"
+              className="form-control"
+              value={tone}
+              onChange={(e) => setTone(e.target.value)}
+              disabled={isGenerating}
+            >
+              {TONE_OPTIONS.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Target URL - Only visible for Link Post */}
+        {publishType === 'link' && (
+          <div className="form-group">
+            <label htmlFor="targetUrl">Link đích (Destination URL)</label>
+            <input
+              type="url"
+              id="targetUrl"
+              className="form-control"
+              placeholder="Ví dụ: https://my-website.com/product"
+              value={targetUrl}
+              onChange={(e) => setTargetUrl(e.target.value)}
+              disabled={isGenerating}
+              required={publishType === 'link'}
+            />
+          </div>
+        )}
 
         {/* Campaign selector */}
         <div className="form-group">
@@ -116,7 +208,7 @@ export default function PostGenerator({
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
           <div className="form-group">
-            <label htmlFor="postFormat">Định dạng</label>
+            <label htmlFor="postFormat">Định dạng bài viết</label>
             <select
               id="postFormat"
               className="form-control"
@@ -131,16 +223,16 @@ export default function PostGenerator({
           </div>
 
           <div className="form-group">
-            <label htmlFor="tone">Giọng điệu (Tone)</label>
+            <label htmlFor="formula">Công thức viết bài</label>
             <select
-              id="tone"
+              id="formula"
               className="form-control"
-              value={tone}
-              onChange={(e) => setTone(e.target.value)}
+              value={formula}
+              onChange={(e) => setFormula(e.target.value)}
               disabled={isGenerating}
             >
-              {TONE_OPTIONS.map(t => (
-                <option key={t} value={t}>{t}</option>
+              {FORMULA_OPTIONS.map(f => (
+                <option key={f} value={f}>{f}</option>
               ))}
             </select>
           </div>
@@ -161,26 +253,65 @@ export default function PostGenerator({
           </select>
         </div>
 
-        <div className="form-group">
-          <label htmlFor="formula">Công thức viết bài</label>
-          <select
-            id="formula"
-            className="form-control"
-            value={formula}
-            onChange={(e) => setFormula(e.target.value)}
-            disabled={isGenerating}
-          >
-            {FORMULA_OPTIONS.map(f => (
-              <option key={f} value={f}>{f}</option>
-            ))}
-          </select>
+        {/* Image Attachment (Moved from Preview card) */}
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1.25rem', marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.4rem' }}>
+              🖼️ Đính kèm hình ảnh {publishType === 'link' ? '(để tạo Link Preview Card)' : ''}
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <input
+                type="file"
+                accept="image/*"
+                id="image-attachment-generator"
+                style={{ display: 'none' }}
+                onChange={handleImageSelect}
+                disabled={isCompressing || isGenerating}
+              />
+              <label
+                htmlFor="image-attachment-generator"
+                className="btn btn-sm"
+                style={{
+                  cursor: 'pointer', background: 'var(--bg-secondary)',
+                  color: 'var(--text-secondary)', display: 'inline-flex',
+                  alignItems: 'center', gap: '0.35rem', pointerEvents: isCompressing || isGenerating ? 'none' : 'auto',
+                  opacity: isCompressing || isGenerating ? 0.6 : 1
+                }}
+              >
+                {isCompressing ? '⏳ Đang xử lý ảnh...' : '📁 Chọn ảnh từ thiết bị'}
+              </label>
+              {attachedFile && (
+                <span style={{ fontSize: '0.75rem', color: 'var(--success)' }}>✓ Đã đính kèm ảnh</span>
+              )}
+            </div>
+            {attachedImage && (
+              <div style={{ position: 'relative', width: '100%', maxHeight: '120px', borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--border)', marginTop: '0.65rem' }}>
+                <img src={attachedImage} alt="Preview" style={{ width: '100%', height: '120px', objectFit: 'cover' }} />
+                <button
+                  type="button"
+                  onClick={handleRemoveImage}
+                  style={{
+                    position: 'absolute', top: '0.25rem', right: '0.25rem',
+                    width: 20, height: 20, borderRadius: '50%',
+                    background: 'rgba(0,0,0,0.7)', border: 'none', color: '#fff',
+                    fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    lineHeight: 1
+                  }}
+                  title="Gỡ ảnh"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         <button
           type="submit"
           className="btn btn-primary"
-          style={{ width: '100%', justifyContent: 'center', marginTop: '0.5rem', padding: '0.75rem' }}
-          disabled={isGenerating || !topic.trim()}
+          style={{ width: '100%', justifyContent: 'center', marginTop: '1.25rem', padding: '0.75rem' }}
+          disabled={isGenerating || isCompressing || !topic.trim()}
         >
           {isGenerating ? '⏳ Đang tạo nội dung AI...' : 'Tạo bài viết với AI 🤖'}
         </button>

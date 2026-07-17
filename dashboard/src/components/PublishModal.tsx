@@ -4,6 +4,7 @@ import type { PageData } from '../api.ts';
 interface PublishModalProps {
   content: string;
   mediaUrl?: string;
+  publishProgress?: string;
   pages: PageData[];
   selectedPageId: string;
   isPublishing: boolean;
@@ -14,6 +15,7 @@ interface PublishModalProps {
 export default function PublishModal({
   content,
   mediaUrl,
+  publishProgress,
   pages,
   selectedPageId,
   isPublishing,
@@ -54,7 +56,13 @@ export default function PublishModal({
         style={{
           margin: 'auto',
           maxWidth: 540,
+          width: '100%',
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)',
+          padding: '1.75rem',
           display: 'flex', flexDirection: 'column', gap: '1.25rem',
+          boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5), 0 10px 10px -5px rgba(0,0,0,0.5)',
         }}
       >
         {/* Header */}
@@ -73,6 +81,23 @@ export default function PublishModal({
             </button>
           )}
         </div>
+
+        {/* Real-time progress display */}
+        {isPublishing && (
+          <div style={{
+            background: 'var(--accent-light)', border: '1px solid var(--accent)',
+            borderRadius: 'var(--radius-sm)', padding: '0.75rem',
+            textAlign: 'center', fontSize: '0.88rem', color: 'var(--accent)',
+            fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem'
+          }}>
+            <span className="spinner-mini" style={{
+              display: 'inline-block', width: '12px', height: '12px',
+              border: '2px solid var(--accent)', borderTopColor: 'transparent',
+              borderRadius: '50%', animation: 'spin 0.8s linear infinite'
+            }} />
+            {publishProgress || '⏳ Đang xử lý đăng bài...'}
+          </div>
+        )}
 
         {/* Page info */}
         <div
@@ -127,6 +152,7 @@ export default function PublishModal({
                 if (!e.target.checked) { setScheduleDate(''); setScheduleTime(''); }
               }}
               style={{ accentColor: 'var(--accent)' }}
+              disabled={isPublishing}
             />
             📅 Lên lịch đăng sau
           </label>

@@ -7,6 +7,7 @@ export interface GenerateRequest {
   formula: string;
   tone: string;
   postFormat?: 'Post' | 'Reel' | 'Video';
+  publishType?: 'image' | 'link';
   wikiSlug?: string;
   allowWebSearch?: boolean;
   brandVoice?: string;
@@ -18,6 +19,8 @@ export interface GenerateResponse {
   formulaApplied: string;
   variants: string[];
   tokenUsage: { input: number; output: number; total: number } | null;
+  linkTitle?: string;
+  linkDescription?: string;
 }
 
 const VIETNAMESE_HOOKS = [
@@ -52,13 +55,21 @@ function buildPrompt(request: GenerateRequest): string {
     ? `\n- HƯỚNG DẪN GIỌNG ĐIỆU THƯƠNG HIỆU:\n${request.brandVoice}`
     : '';
 
+  const isLinkPost = request.publishType === 'link';
+  const linkGuideline = isLinkPost
+    ? '\n- BÀI ĐĂNG KÈM LINK: Bạn CẦN viết thêm tiêu đề (link_title) và mô tả (link_description) hấp dẫn cho card preview của link.'
+    : '';
+  const linkFormat = isLinkPost
+    ? `\n---link_title---\nTiêu đề cho link card preview (dưới 60 ký tự)\n---link_description---\nMô tả cho link card preview (dưới 150 ký tự)`
+    : '';
+
   return `Bạn là copywriter Facebook chuyên nghiệp, viết bài đăng Facebook bằng tiếng Việt.
 
 YÊU CẦU:
 - Chủ đề: ${request.topic}
 - Loại Hook: ${request.hookType}
 - Công thức: ${request.formula}
-- Giọng điệu: ${request.tone}${formatGuideline}${brandVoiceSection}
+- Giọng điệu: ${request.tone}${formatGuideline}${brandVoiceSection}${linkGuideline}
 
 QUY TẮC:
 1. KHÔNG dùng các cụm từ spam: "Bạn đã bao giờ tự hỏi", "Bạn có biết rằng", "đắm chìm", "trải nghiệm", "siêu phẩm", "kiệt tác".
@@ -68,13 +79,14 @@ QUY TẮC:
 5. Giới hạn hashtag: 2-3 hashtag ở cuối bài.
 6. Viết tự nhiên như người thật, tránh AI-sounding.
 7. Kết thúc bằng câu hỏi mở để khuyến khích bình luận tự nhiên.
+${isLinkPost ? '8. KHÔNG chèn trực tiếp link URL vào bài viết. Link sẽ được tự động rút gọn và thêm vào cuối bài sau.' : ''}
 
 Hãy trả lời theo định dạng CHÍNH XÁC sau (dùng dấu --- để phân cách các phần):
 
 ---selected_hook---
 Tên hook đã chọn
 ---formula_applied---
-Tên công thức đã áp dụng
+Tên công thức đã áp dụng${linkFormat}
 ---content---
 Nội dung bài viết hoàn chỉnh`;
 }
@@ -91,24 +103,20 @@ export function parseResponse(raw: string, defaultHook: string, defaultFormula: 
       .trim();
   };
 
-  // Try XML tags first (<tag>...</tag>)
   const extractXml = (tag: string): string | null => {
     const match = raw.match(new RegExp(`<${tag}>(.*?)</${tag}>`, 'si'));
     return match?.[1]?.trim() ?? null;
   };
 
-  // Try ---tag--- delimiter format
   const extractDash = (tag: string): string | null => {
     const regex = new RegExp(`---${tag}---\\s*\\n?([\\s\\S]*?)(?:\\n---|$)`, 'i');
     const match = raw.match(regex);
     if (match) return match[1]?.trim() ?? null;
-    // Alternative: try with \n before ---
     const regex2 = new RegExp(`---${tag}---([\\s\\S]*?)(?:---|$)`, 'i');
     const match2 = raw.match(regex2);
     return match2?.[1]?.trim() ?? null;
   };
 
-  // Helper: try both formats
   const extract = (tag: string): string | null => {
     return extractXml(tag) ?? extractDash(tag) ?? null;
   };
@@ -121,6 +129,8 @@ export function parseResponse(raw: string, defaultHook: string, defaultFormula: 
     formulaApplied: extract('formula_applied') ?? defaultFormula,
     variants: [],
     tokenUsage: null,
+    linkTitle: extract('link_title') ?? undefined,
+    linkDescription: extract('link_description') ?? undefined,
   };
 }
 
@@ -135,6 +145,8 @@ export async function generatePostContent(
       formulaApplied: request.formula,
       variants: [],
       tokenUsage: { input: 120, output: 250, total: 370 },
+      linkTitle: request.publishType === 'link' ? `Khám phá ngay: ${request.topic}` : undefined,
+      linkDescription: request.publishType === 'link' ? `Tìm hiểu chi tiết về ${request.topic} với những thông tin mới nhất và giải pháp hữu ích từ chúng tôi.` : undefined,
     };
   }
 

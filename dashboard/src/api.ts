@@ -80,6 +80,7 @@ export interface GenerateRequest {
   formula: string;
   tone: string;
   postFormat?: 'Post' | 'Reel' | 'Video';
+  publishType?: 'image' | 'link';
   wikiSlug?: string;
   allowWebSearch?: boolean;
 }
@@ -92,6 +93,8 @@ export interface GenerateResponse {
   generationId: string;
   tokenUsage: { input: number; output: number; total: number } | null;
   tone?: string;
+  linkTitle?: string;
+  linkDescription?: string;
 }
 
 export interface PublishRequest {
