@@ -83,6 +83,27 @@ app.use('/api/*', async (c, next) => {
 app.get('/health', (c) => c.json({ status: 'ok', service: 'postie-worker' }));
 app.get('/', (c) => c.json({ status: 'ok', service: 'postie-worker' }));
 
+// ─── Public Media Serving from R2 ────────────────────────────────────────────
+app.get('/media/file/:userId/:filename', async (c) => {
+  const userId = c.req.param('userId');
+  const filename = c.req.param('filename');
+  const key = `${userId}/${filename}`;
+
+  try {
+    const object = await c.env.IMAGES.get(key);
+    if (!object) return c.json({ error: 'File not found' }, 404);
+
+    const headers = new Headers();
+    object.writeHttpMetadata(headers);
+    headers.set('Access-Control-Allow-Origin', '*');
+    headers.set('Cache-Control', 'public, max-age=31536000');
+
+    return new Response(object.body, { headers });
+  } catch (err) {
+    return c.json({ error: 'Failed to retrieve media file' }, 500);
+  }
+});
+
 // ─── Mount Feature Slice Routes ───────────────────────────────────────────────
 app.route('/api', pagesRouter);
 app.route('/api', postsRouter);

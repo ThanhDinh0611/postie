@@ -54,7 +54,10 @@ postsRouter.post('/posts/publish', async (c) => {
 
   // Securely handle Clipy short-link generation on the backend
   let shortUrl = '';
-  if (body.publishType === 'link' && c.env.CLIPY_API_KEY) {
+  if (body.publishType === 'link') {
+    if (!c.env.CLIPY_API_KEY) {
+      throw new Error('Lỗi cấu hình hệ thống: CLIPY_API_KEY chưa được khai báo trên Worker.');
+    }
     const clipyUrl = c.env.CLIPY_API_URL || 'https://clipy-worker.dct98.workers.dev/api';
     try {
       const linkRes = await fetch(`${clipyUrl}/links`, {
@@ -75,10 +78,11 @@ postsRouter.post('/posts/publish', async (c) => {
         const baseRedirectUrl = clipyUrl.replace(/\/api$/, '');
         shortUrl = `${baseRedirectUrl}/${linkData.short_code}`;
       } else {
-        console.error('Failed to generate Clipy link:', await linkRes.text());
+        const errText = await linkRes.text();
+        throw new Error(`Clipy API Error (${linkRes.status}): ${errText}`);
       }
     } catch (e) {
-      console.error('Error calling Clipy API:', e);
+      throw new Error(`Lỗi kết nối Clipy API: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 

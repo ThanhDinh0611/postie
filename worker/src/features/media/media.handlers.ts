@@ -32,7 +32,8 @@ mediaRouter.post('/media/upload', async (c) => {
       customMetadata: { userId },
     });
 
-    const publicUrl = `${c.env.R2_PUBLIC_URL}/${fileName}`;
+    const baseUrl = c.env.R2_PUBLIC_URL ? c.env.R2_PUBLIC_URL.replace(/\/$/, '') : `${new URL(c.req.url).origin}/media/file`;
+    const publicUrl = `${baseUrl}/${fileName}`;
     return c.json({ image_url: publicUrl, fileName });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : 'Upload failed' }, 500);
@@ -46,9 +47,10 @@ mediaRouter.get('/media', async (c) => {
 
   try {
     const objects = await c.env.IMAGES.list({ prefix: `${userId}/` });
+    const baseUrl = c.env.R2_PUBLIC_URL ? c.env.R2_PUBLIC_URL.replace(/\/$/, '') : `${new URL(c.req.url).origin}/media/file`;
     const images = objects.objects.map((obj) => ({
       fileName: obj.key,
-      url: `${c.env.R2_PUBLIC_URL}/${obj.key}`,
+      url: `${baseUrl}/${obj.key}`,
       uploadedAt: obj.uploaded,
       size: obj.size,
     }));
