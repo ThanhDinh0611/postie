@@ -16,6 +16,7 @@ import PostPreview from './PostPreview.tsx';
 import LinkResultCard from './LinkResultCard.tsx';
 import PublishModal from './PublishModal.tsx';
 import ImageCropperModal from './ImageCropperModal.tsx';
+import { useToast } from '../hooks/useToast.tsx';
 
 interface HomePageProps {
   pages: PageData[];
@@ -25,6 +26,7 @@ interface HomePageProps {
 
 export default function HomePage({ pages, campaigns, onDataChange }: HomePageProps) {
   const { getToken } = useAuth();
+  const { addToast } = useToast();
   
   // Page selection state
   const [selectedPageId, setSelectedPageId] = useState('');
@@ -104,7 +106,7 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
       setLinkTitle(result.linkTitle ?? '');
       setLinkDescription(result.linkDescription ?? '');
     } catch (err) {
-      alert(`⚠️ Lỗi tạo bài viết: ${err instanceof Error ? err.message : String(err)}`);
+      addToast(`Lỗi tạo bài viết: ${err instanceof Error ? err.message : String(err)}`, 'error');
     } finally {
       setIsGenerating(false);
     }
@@ -112,7 +114,7 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
 
   const handleShowPublishModal = (finalContent: string) => {
     if (!selectedPageId) {
-      alert('⚠️ Vui lòng chọn Fanpage để đăng bài!');
+      addToast('Vui lòng chọn Fanpage để đăng bài!', 'warning');
       return;
     }
     setPublishContent(finalContent);
@@ -167,8 +169,9 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
       setPublishResult(result);
       setShowPublishModal(false);
       onDataChange?.();
+      addToast(scheduledAt ? 'Đã lên lịch bài viết thành công! 📅' : 'Đăng bài lên Fanpage thành công! 🚀', 'success');
     } catch (err) {
-      alert(`⚠️ Lỗi đăng bài: ${err instanceof Error ? err.message : String(err)}`);
+      addToast(`Lỗi đăng bài: ${err instanceof Error ? err.message : String(err)}`, 'error');
     } finally {
       setIsPublishing(false);
       setPublishProgress('');
@@ -220,7 +223,7 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
       setCropperFile(null);
       setCroppedAreaPixels(null);
     } catch (err) {
-      alert('⚠️ Lỗi cắt ảnh: ' + (err instanceof Error ? err.message : String(err)));
+      addToast('Lỗi cắt ảnh: ' + (err instanceof Error ? err.message : String(err)), 'error');
     } finally {
       setIsPublishing(false);
       setPublishProgress('');

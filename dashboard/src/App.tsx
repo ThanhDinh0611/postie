@@ -11,6 +11,7 @@ import HomePage from './components/HomePage.tsx';
 import PagesPage from './components/PagesPage.tsx';
 import PostHistory from './components/PostHistory.tsx';
 import SyncDashboard from './components/SyncDashboard.tsx';
+import { ToastProvider } from './hooks/useToast.tsx';
 
 const CLERK_PUBLISHABLE_KEY = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string || '').trim();
 
@@ -239,7 +240,9 @@ export default function App() {
   }
   return (
     <BrowserRouter>
-      <ClerkProviderWithRouter />
+      <ToastProvider>
+        <ClerkProviderWithRouter />
+      </ToastProvider>
     </BrowserRouter>
   );
 }

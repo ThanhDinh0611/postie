@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { PageData } from '../api.ts';
+import { useToast } from '../hooks/useToast.tsx';
 
 interface PublishModalProps {
   content: string;
@@ -24,6 +25,7 @@ export default function PublishModal({
 }: PublishModalProps) {
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
+  const { addToast } = useToast();
   const selectedPage = pages.find((p) => p.id === selectedPageId);
 
   const handleConfirm = () => {
@@ -32,7 +34,7 @@ export default function PublishModal({
       const localDate = new Date(`${scheduleDate}T${scheduleTime}`);
       scheduledAt = Math.floor(localDate.getTime() / 1000);
       if (scheduledAt <= Math.floor(Date.now() / 1000)) {
-        alert('⚠️ Thời gian lên lịch phải ở tương lai. Vui lòng chọn lại.');
+        addToast('Thời gian lên lịch phải ở tương lai. Vui lòng chọn lại.', 'warning');
         return;
       }
     }

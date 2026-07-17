@@ -89,6 +89,7 @@ export async function publishPost(
   message: string,
   mediaUrl?: string,
   scheduledTime?: number,
+  link?: string,
 ): Promise<FacebookPostResult> {
   const body: Record<string, string> = { message, access_token: pageAccessToken };
 
@@ -109,8 +110,12 @@ export async function publishPost(
     return res.json() as Promise<FacebookPostResult>;
   }
 
-  // Text post
-  body.no_story = 'true';
+  // Text/Link post
+  if (link) {
+    body.link = link;
+  } else {
+    body.no_story = 'true';
+  }
   const res = await fetch(`${GRAPH_API_BASE}/${pageId}/feed`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

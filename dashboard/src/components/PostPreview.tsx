@@ -1,4 +1,5 @@
 import type { PageData } from '../api.ts';
+import { useToast } from '../hooks/useToast.tsx';
 
 interface PostPreviewProps {
   content: string;
@@ -31,9 +32,11 @@ export default function PostPreview({
   linkDescription,
   setLinkDescription
 }: PostPreviewProps) {
+  const { addToast } = useToast();
+
   const handleCopy = () => {
     navigator.clipboard.writeText(content);
-    alert('📋 Đã sao chép nội dung vào khay nhớ tạm!');
+    addToast('Đã sao chép nội dung vào khay nhớ tạm! 📋', 'success');
   };
 
   return (

@@ -91,7 +91,7 @@ postsRouter.post('/posts/publish', async (c) => {
     // If link post, Facebook parses target OG metadata; don't attach raw mediaUrl to make a standalone photo post
     const fbMediaUrl = body.publishType === 'image' ? body.mediaUrl : undefined;
 
-    const fbResult = await publishPost(page.access_token, page.facebook_page_id, finalContent, fbMediaUrl, body.scheduledAt);
+    const fbResult = await publishPost(page.access_token, page.facebook_page_id, finalContent, fbMediaUrl, body.scheduledAt, shortUrl || undefined);
     const permalink = buildPermalink(page.username ?? page.facebook_page_id, fbResult.id);
 
     const postId = crypto.randomUUID();

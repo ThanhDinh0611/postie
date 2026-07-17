@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { getPosts, type PostData, type CampaignData, type PageData } from '../api.ts';
+import { useToast } from '../hooks/useToast.tsx';
 
 interface PostHistoryProps {
   initialPosts?: PostData[];
@@ -11,6 +12,7 @@ interface PostHistoryProps {
 
 export default function PostHistory({ initialPosts, pages = [], campaigns = [], onRefresh }: PostHistoryProps) {
   const { getToken } = useAuth();
+  const { addToast } = useToast();
   const [posts, setPosts] = useState<PostData[]>(initialPosts ?? []);
   const [loading, setLoading] = useState(false);
   
@@ -63,8 +65,9 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
       await navigator.clipboard.writeText(permalink);
       setCopyFeedback(permalink);
       setTimeout(() => setCopyFeedback(null), 2000);
+      addToast('📋 Đã sao chép liên kết vào khay nhớ tạm!', 'success');
     } catch {
-      alert('Cannot copy.');
+      addToast('Không thể sao chép liên kết.', 'error');
     }
   };
 
