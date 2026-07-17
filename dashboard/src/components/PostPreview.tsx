@@ -9,6 +9,8 @@ interface PostPreviewProps {
   pages: PageData[];
   selectedPageId: string;
   setSelectedPageId: (id: string) => void;
+  attachedImage: string | null;
+  setAttachedImage: (url: string | null) => void;
 }
 
 export default function PostPreview({
@@ -18,9 +20,10 @@ export default function PostPreview({
   pages,
   selectedPageId,
   setSelectedPageId,
+  attachedImage,
+  setAttachedImage
 }: PostPreviewProps) {
   const { getToken } = useAuth();
-  const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 

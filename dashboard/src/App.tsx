@@ -63,15 +63,27 @@ function NavBar({ isAdmin }: { isAdmin: boolean }) {
 
 function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campaigns: CampaignData[]; onDataChange?: () => void }) {
   const { getToken } = useAuth();
+  
+  // Page selection state
+  const [selectedPageId, setSelectedPageId] = useState('');
+  
+  // Persistent Draft States (Per Page)
+  const [topic, setTopic] = useState('');
+  const [hookType, setHookType] = useState('1. Sự thật thú vị (Interesting fact)');
+  const [formula, setFormula] = useState('PAS (Problem-Agitation-Solution)');
+  const [tone, setTone] = useState('Friendly');
+  const [postFormat, setPostFormat] = useState<'Post' | 'Reel' | 'Video'>('Post');
+  const [selectedCampaignId, setSelectedCampaignId] = useState('');
+  const [generationResult, setGenerationResult] = useState<GenerateResponse | null>(null);
+  const [attachedImage, setAttachedImage] = useState<string | null>(null);
+
+  // Volatile Action States
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [publishContent, setPublishContent] = useState('');
   const [publishMediaUrl, setPublishMediaUrl] = useState<string | undefined>(undefined);
-  const [generationResult, setGenerationResult] = useState<GenerateResponse | null>(null);
   const [publishResult, setPublishResult] = useState<PublishResponse | null>(null);
-  const [selectedPageId, setSelectedPageId] = useState('');
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string | undefined>(undefined);
 
   // Set default active page
   useEffect(() => {
@@ -81,6 +93,55 @@ function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campa
       else setSelectedPageId(pages[0]!.id);
     }
   }, [pages, selectedPageId]);
+
+  // Load draft from localStorage when page selection changes
+  useEffect(() => {
+    if (!selectedPageId) return;
+    const key = `postie_draft_page_${selectedPageId}`;
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      try {
+        const data = JSON.parse(stored);
+        setTopic(data.topic ?? '');
+        setHookType(data.hookType ?? '1. Sự thật thú vị (Interesting fact)');
+        setFormula(data.formula ?? 'PAS (Problem-Agitation-Solution)');
+        setTone(data.tone ?? 'Friendly');
+        setPostFormat(data.postFormat ?? 'Post');
+        setSelectedCampaignId(data.campaignId ?? '');
+        setGenerationResult(data.generationResult ?? null);
+        setAttachedImage(data.attachedImage ?? null);
+      } catch (err) {
+        console.error('Failed to parse draft from localStorage:', err);
+      }
+    } else {
+      // Clear/Reset to defaults for a page with no draft
+      setTopic('');
+      setHookType('1. Sự thật thú vị (Interesting fact)');
+      setFormula('PAS (Problem-Agitation-Solution)');
+      setTone('Friendly');
+      setPostFormat('Post');
+      setSelectedCampaignId('');
+      setGenerationResult(null);
+      setAttachedImage(null);
+    }
+  }, [selectedPageId]);
+
+  // Save draft to localStorage when states change
+  useEffect(() => {
+    if (!selectedPageId) return;
+    const key = `postie_draft_page_${selectedPageId}`;
+    const data = {
+      topic,
+      hookType,
+      formula,
+      tone,
+      postFormat,
+      campaignId: selectedCampaignId,
+      generationResult,
+      attachedImage
+    };
+    localStorage.setItem(key, JSON.stringify(data));
+  }, [selectedPageId, topic, hookType, formula, tone, postFormat, selectedCampaignId, generationResult, attachedImage]);
 
   const handleGenerate = async (data: {
     topic: string;
@@ -92,7 +153,6 @@ function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campa
   }) => {
     setIsGenerating(true);
     setPublishResult(null);
-    setSelectedCampaignId(data.campaignId);
     try {
       const token = await getToken();
       if (!token) throw new Error('Unauthorized');
@@ -111,18 +171,16 @@ function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campa
     }
   };
 
-  // Show publish confirmation modal
   const handleShowPublishModal = (finalContent: string, mediaUrl?: string) => {
     if (!selectedPageId) {
       alert('⚠️ Vui lòng chọn Fanpage để đăng bài!');
       return;
     }
     setPublishContent(finalContent);
-    setPublishMediaUrl(mediaUrl);
+    setPublishMediaUrl(mediaUrl || attachedImage || undefined);
     setShowPublishModal(true);
   };
 
-  // Actually publish after modal confirmation
   const handleConfirmPublish = async (finalContent: string, scheduledAt?: number) => {
     setIsPublishing(true);
     try {
@@ -135,13 +193,22 @@ function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campa
         formula: generationResult?.formulaApplied,
         tone: generationResult?.tone ?? undefined,
         scheduledAt,
-        campaignId: selectedCampaignId,
+        campaignId: selectedCampaignId || undefined,
         generationId: generationResult?.generationId ?? undefined,
         mediaUrl: publishMediaUrl,
       }, token);
+
+      // Clear draft on successful publish
+      setGenerationResult(null);
+      setAttachedImage(null);
+      setTopic('');
+      if (selectedPageId) {
+        localStorage.removeItem(`postie_draft_page_${selectedPageId}`);
+      }
+
       setPublishResult(result);
       setShowPublishModal(false);
-      onDataChange?.(); // Refresh parent data
+      onDataChange?.();
     } catch (err) {
       alert(`⚠️ Lỗi đăng bài: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -152,8 +219,12 @@ function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campa
   const handleReset = () => {
     setGenerationResult(null);
     setPublishResult(null);
-    setSelectedCampaignId(undefined);
+    setAttachedImage(null);
     setPublishMediaUrl(undefined);
+    setTopic('');
+    if (selectedPageId) {
+      localStorage.removeItem(`postie_draft_page_${selectedPageId}`);
+    }
   };
 
   return (
@@ -182,7 +253,23 @@ function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campa
         />
       ) : (
         <div className="generator-grid">
-          <PostGenerator campaigns={campaigns} onGenerate={handleGenerate} isGenerating={isGenerating} />
+          <PostGenerator
+            campaigns={campaigns}
+            onGenerate={handleGenerate}
+            isGenerating={isGenerating}
+            topic={topic}
+            setTopic={setTopic}
+            hookType={hookType}
+            setHookType={setHookType}
+            formula={formula}
+            setFormula={setFormula}
+            tone={tone}
+            setTone={setTone}
+            postFormat={postFormat}
+            setPostFormat={setPostFormat}
+            campaignId={selectedCampaignId}
+            setCampaignId={setSelectedCampaignId}
+          />
           {generationResult ? (
             <PostPreview
               content={generationResult.content}
@@ -191,6 +278,8 @@ function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campa
               pages={pages}
               selectedPageId={selectedPageId}
               setSelectedPageId={setSelectedPageId}
+              attachedImage={attachedImage}
+              setAttachedImage={setAttachedImage}
             />
           ) : (
             <div className="preview-card" style={{ justifyContent: 'center', alignItems: 'center', minHeight: '300px', color: 'var(--text-muted)' }}>

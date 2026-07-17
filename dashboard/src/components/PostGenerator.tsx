@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import type { CampaignData } from '../api.ts';
 
 export const HOOK_OPTIONS = [
@@ -34,15 +33,39 @@ interface PostGeneratorProps {
     campaignId?: string;
   }) => void;
   isGenerating: boolean;
+
+  // Persisted Draft Props
+  topic: string;
+  setTopic: (val: string) => void;
+  hookType: string;
+  setHookType: (val: string) => void;
+  formula: string;
+  setFormula: (val: string) => void;
+  tone: string;
+  setTone: (val: string) => void;
+  postFormat: 'Post' | 'Reel' | 'Video';
+  setPostFormat: (val: 'Post' | 'Reel' | 'Video') => void;
+  campaignId: string;
+  setCampaignId: (val: string) => void;
 }
 
-export default function PostGenerator({ campaigns = [], onGenerate, isGenerating }: PostGeneratorProps) {
-  const [topic, setTopic] = useState('');
-  const [hookType, setHookType] = useState(HOOK_OPTIONS[0]!);
-  const [formula, setFormula] = useState(FORMULA_OPTIONS[0]!);
-  const [tone, setTone] = useState(TONE_OPTIONS[0]!);
-  const [postFormat, setPostFormat] = useState<'Post' | 'Reel' | 'Video'>('Post');
-  const [campaignId, setCampaignId] = useState('');
+export default function PostGenerator({
+  campaigns = [],
+  onGenerate,
+  isGenerating,
+  topic,
+  setTopic,
+  hookType,
+  setHookType,
+  formula,
+  setFormula,
+  tone,
+  setTone,
+  postFormat,
+  setPostFormat,
+  campaignId,
+  setCampaignId
+}: PostGeneratorProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
