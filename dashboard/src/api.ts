@@ -404,7 +404,7 @@ export async function createPostComment(postId: string, message: string, token: 
 
 export async function generateComment(
   postId: string,
-  params: { useClipy: boolean; targetUrl?: string; linkTitle?: string; linkDescription?: string },
+  params: { useClipy: boolean; targetUrl?: string; linkTitle?: string; linkDescription?: string; imageUrl?: string },
   token: string
 ): Promise<{ comment: string }> {
   return fetchJson<{ comment: string }>(`${API_BASE}/api/posts/${postId}/comments/generate`, {

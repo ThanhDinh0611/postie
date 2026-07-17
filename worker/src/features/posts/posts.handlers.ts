@@ -284,6 +284,7 @@ postsRouter.post('/posts/:id/comments/generate', async (c) => {
     targetUrl?: string;
     linkTitle?: string;
     linkDescription?: string;
+    imageUrl?: string;
   };
   try {
     body = await c.req.json();
@@ -311,7 +312,7 @@ postsRouter.post('/posts/:id/comments/generate', async (c) => {
           target_url: body.targetUrl,
           title: body.linkTitle || 'Explore Link',
           description: body.linkDescription || 'Shared via Clipy',
-          image_url: ''
+          image_url: body.imageUrl || ''
         })
       });
 

@@ -68,7 +68,7 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
     setCropperFile(file);
     setCrop({ x: 0, y: 0 });
     setZoom(1);
-    setAspectRatio(1); // 1:1 for comments
+    setAspectRatio(1.91); // Facebook Link Preview ratio
   };
 
   const handleCropComplete = (_: Area, croppedAreaPixels: Area) => {
@@ -133,19 +133,13 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
   };
 
   const handlePostComment = async (postId: string) => {
-    if (!newCommentText.trim() && !commentAttachedFile) return;
+    if (!newCommentText.trim()) return;
     setPostingComment(true);
     try {
       const token = await getToken();
       if (!token) return;
 
-      let attachmentUrl: string | undefined;
-      if (commentAttachedFile) {
-        const uploadRes = await uploadImage(commentAttachedFile, token);
-        attachmentUrl = uploadRes.image_url;
-      }
-
-      await createPostComment(postId, newCommentText, token, attachmentUrl);
+      await createPostComment(postId, newCommentText, token);
       addToast('Đã đăng bình luận thành công! 💬', 'success');
       setNewCommentText('');
       setCommentAttachedFile(null);
@@ -163,11 +157,19 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
     try {
       const token = await getToken();
       if (!token) return;
+
+      let imageUrl: string | undefined;
+      if (commentAttachedFile) {
+        const uploadRes = await uploadImage(commentAttachedFile, token);
+        imageUrl = uploadRes.image_url;
+      }
+
       const result = await generateComment(postId, {
         useClipy,
         targetUrl: useClipy ? commentTargetUrl : undefined,
         linkTitle: useClipy ? commentLinkTitle : undefined,
         linkDescription: useClipy ? commentLinkDescription : undefined,
+        imageUrl,
       }, token);
       setNewCommentText(result.comment);
       addToast('Tạo bình luận AI thành công! 🤖', 'success');
@@ -487,6 +489,63 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
                                 onChange={(e) => setCommentLinkDescription(e.target.value)}
                               />
                             </div>
+
+                            {/* Link preview image picker */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.2rem' }}>
+                              <input
+                                type="file"
+                                id={`commentImage-${post.id}`}
+                                accept="image/*"
+                                style={{ display: 'none' }}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handleImageSelect(file);
+                                }}
+                              />
+                              <label
+                                htmlFor={`commentImage-${post.id}`}
+                                className="btn btn-sm"
+                                style={{ cursor: 'pointer', fontSize: '0.72rem', padding: '0.25rem 0.5rem', marginBottom: 0 }}
+                              >
+                                🖼️ Chọn ảnh xem trước cho link
+                              </label>
+
+                              {commentAttachedImage && (
+                                <div style={{ position: 'relative', display: 'inline-block' }}>
+                                  <img
+                                    src={commentAttachedImage}
+                                    alt="Link preview OG"
+                                    style={{ maxHeight: '32px', borderRadius: '2px', border: '1px solid var(--border)' }}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCommentAttachedFile(null);
+                                      setCommentAttachedImage(null);
+                                    }}
+                                    style={{
+                                      position: 'absolute',
+                                      top: '-4px',
+                                      right: '-4px',
+                                      width: '12px',
+                                      height: '12px',
+                                      borderRadius: '50%',
+                                      background: '#ef4444',
+                                      color: '#fff',
+                                      border: 'none',
+                                      fontSize: '7px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      cursor: 'pointer',
+                                      padding: 0
+                                    }}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
 
@@ -511,68 +570,11 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
                       disabled={postingComment}
                     />
 
-                    {/* Comment Image Attachment Preview */}
-                    {commentAttachedImage && (
-                      <div style={{ marginTop: '0.5rem', position: 'relative', display: 'inline-block', alignSelf: 'flex-start' }}>
-                        <img
-                          src={commentAttachedImage}
-                          alt="Comment attachment"
-                          style={{ maxHeight: '80px', borderRadius: '4px', border: '1px solid var(--border)' }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCommentAttachedFile(null);
-                            setCommentAttachedImage(null);
-                          }}
-                          style={{
-                            position: 'absolute',
-                            top: '-6px',
-                            right: '-6px',
-                            width: '18px',
-                            height: '18px',
-                            borderRadius: '50%',
-                            background: '#ef4444',
-                            color: '#fff',
-                            border: 'none',
-                            fontSize: '10px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer',
-                            padding: 0
-                          }}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    )}
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.2rem' }}>
-                      <div>
-                        <input
-                          type="file"
-                          id={`commentImage-${post.id}`}
-                          accept="image/*"
-                          style={{ display: 'none' }}
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) handleImageSelect(file);
-                          }}
-                        />
-                        <label
-                          htmlFor={`commentImage-${post.id}`}
-                          className="btn btn-sm"
-                          style={{ cursor: 'pointer', fontSize: '0.78rem', padding: '0.35rem 0.6rem' }}
-                        >
-                          📷 Đính kèm ảnh
-                        </label>
-                      </div>
-
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.2rem' }}>
                       <button
                         className="btn btn-sm btn-primary"
                         onClick={() => handlePostComment(post.id)}
-                        disabled={postingComment || (!newCommentText.trim() && !commentAttachedFile)}
+                        disabled={postingComment || !newCommentText.trim()}
                       >
                         {postingComment ? 'Đang gửi...' : 'Gửi bình luận 🚀'}
                       </button>
