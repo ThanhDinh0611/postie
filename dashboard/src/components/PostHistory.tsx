@@ -38,6 +38,10 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
   const [sortBy, setSortBy] = useState('latest');
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
+  // Deletion states
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
+  const [deletingCommentKey, setDeletingCommentKey] = useState<string | null>(null);
+
   // Comments & AI Assist states
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
   const [comments, setComments] = useState<CommentData[]>([]);
@@ -183,6 +187,7 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
   };
 
   const handleDeletePost = async (postId: string) => {
+    setDeletingPostId(postId);
     try {
       const token = await getToken();
       if (!token) return;
@@ -194,10 +199,14 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
       }
     } catch (err) {
       addToast(`Lỗi xóa bài viết: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    } finally {
+      setDeletingPostId(null);
     }
   };
 
   const handleDeleteComment = async (postId: string, commentId: string) => {
+    const key = `${postId}:${commentId}`;
+    setDeletingCommentKey(key);
     try {
       const token = await getToken();
       if (!token) return;
@@ -207,6 +216,8 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
       fetchComments(postId);
     } catch (err) {
       addToast(`Lỗi xóa bình luận: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    } finally {
+      setDeletingCommentKey(null);
     }
   };
 
@@ -420,9 +431,10 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
                     <button
                       className="btn btn-sm"
                       onClick={() => handleDeletePost(post.id)}
-                      style={{ color: '#ef4444', borderColor: '#ef4444' }}
+                      disabled={deletingPostId === post.id}
+                      style={{ color: '#ef4444', borderColor: '#ef4444', opacity: deletingPostId === post.id ? 0.6 : 1, cursor: deletingPostId === post.id ? 'not-allowed' : 'pointer' }}
                     >
-                      🗑️ Xóa
+                      {deletingPostId === post.id ? '⏳ Đang xóa...' : '🗑️ Xóa'}
                     </button>
                   </div>
                 ) : null}
@@ -460,18 +472,20 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
                               )}
                               <button
                                 onClick={() => handleDeleteComment(post.id, c.id)}
+                                disabled={deletingCommentKey === `${post.id}:${c.id}`}
                                 style={{
                                   background: 'none',
                                   border: 'none',
                                   color: '#ef4444',
-                                  cursor: 'pointer',
+                                  cursor: deletingCommentKey === `${post.id}:${c.id}` ? 'not-allowed' : 'pointer',
                                   fontSize: '0.8rem',
                                   padding: '2px 4px',
-                                  marginLeft: '0.2rem'
+                                  marginLeft: '0.2rem',
+                                  opacity: deletingCommentKey === `${post.id}:${c.id}` ? 0.5 : 1
                                 }}
                                 title="Xóa bình luận"
                               >
-                                🗑️
+                                {deletingCommentKey === `${post.id}:${c.id}` ? '⏳' : '🗑️'}
                               </button>
                             </div>
                           </div>
