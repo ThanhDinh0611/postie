@@ -240,7 +240,7 @@ postsRouter.post('/posts/:id/comments', async (c) => {
 
   if (!page) return c.json({ error: 'Page not found for this post' }, 404);
 
-  let body: { message: string };
+  let body: { message: string; attachmentUrl?: string };
   try {
     body = await c.req.json();
   } catch {
@@ -252,7 +252,7 @@ postsRouter.post('/posts/:id/comments', async (c) => {
   }
 
   try {
-    const result = await createPostComment(page.access_token, post.facebook_post_id, body.message);
+    const result = await createPostComment(page.access_token, post.facebook_post_id, body.message, body.attachmentUrl);
 
     // Increment comments count locally
     await c.env.DB

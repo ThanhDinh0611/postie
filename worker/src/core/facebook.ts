@@ -289,15 +289,20 @@ export async function createPostComment(
   pageAccessToken: string,
   facebookPostId: string,
   message: string,
+  attachmentUrl?: string,
 ): Promise<{ id: string }> {
   const url = `${GRAPH_API_BASE}/${facebookPostId}/comments`;
+  const params: Record<string, string> = {
+    message,
+    access_token: pageAccessToken,
+  };
+  if (attachmentUrl) {
+    params.attachment_url = attachmentUrl;
+  }
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      message,
-      access_token: pageAccessToken,
-    }),
+    body: new URLSearchParams(params),
   });
   if (!res.ok) {
     throw new Error(`Failed to create comment: ${res.status} ${await res.text()}`);

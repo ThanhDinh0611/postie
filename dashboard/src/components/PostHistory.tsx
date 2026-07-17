@@ -1,16 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-react';
+import { type Area } from 'react-easy-crop';
 import {
   getPosts,
   getPostComments,
   createPostComment,
   generateComment,
+  uploadImage,
   type PostData,
   type CampaignData,
   type PageData,
   type CommentData
 } from '../api.ts';
 import { useToast } from '../hooks/useToast.tsx';
+import { compressImage, getCroppedImg } from '../utils/image.ts';
+import ImageCropperModal from './ImageCropperModal.tsx';
 
 interface PostHistoryProps {
   initialPosts?: PostData[];
@@ -46,6 +50,59 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
   const [commentLinkDescription, setCommentLinkDescription] = useState('');
   const [generatingComment, setGeneratingComment] = useState(false);
 
+  // Image attachments & cropping for comments
+  const [commentAttachedFile, setCommentAttachedFile] = useState<File | null>(null);
+  const [commentAttachedImage, setCommentAttachedImage] = useState<string | null>(null);
+
+  // Cropper states
+  const [cropperSrc, setCropperSrc] = useState('');
+  const [cropperFile, setCropperFile] = useState<File | null>(null);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [aspectRatio, setAspectRatio] = useState<number | undefined>(1);
+
+  const handleImageSelect = (file: File) => {
+    const localUrl = URL.createObjectURL(file);
+    setCropperSrc(localUrl);
+    setCropperFile(file);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setAspectRatio(1); // 1:1 for comments
+  };
+
+  const handleCropComplete = (_: Area, croppedAreaPixels: Area) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  };
+
+  const handleCropConfirm = async () => {
+    if (!cropperSrc || !croppedAreaPixels || !cropperFile) return;
+    setLoadingComments(true);
+    try {
+      const croppedBlob = await getCroppedImg(cropperSrc, croppedAreaPixels);
+      const croppedFile = new File([croppedBlob], cropperFile.name, { type: 'image/jpeg' });
+      
+      const compressedFile = await compressImage(croppedFile);
+      
+      setCommentAttachedFile(compressedFile);
+      setCommentAttachedImage(URL.createObjectURL(compressedFile));
+      
+      setCropperSrc('');
+      setCropperFile(null);
+      setCroppedAreaPixels(null);
+    } catch (err) {
+      addToast('Lỗi cắt ảnh: ' + (err instanceof Error ? err.message : String(err)), 'error');
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  const handleCropCancel = () => {
+    setCropperSrc('');
+    setCropperFile(null);
+    setCroppedAreaPixels(null);
+  };
+
   const fetchComments = async (postId: string) => {
     setLoadingComments(true);
     try {
@@ -61,6 +118,8 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
   };
 
   const handleToggleComments = (postId: string) => {
+    setCommentAttachedFile(null);
+    setCommentAttachedImage(null);
     if (expandedPostId === postId) {
       setExpandedPostId(null);
       setComments([]);
@@ -74,14 +133,23 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
   };
 
   const handlePostComment = async (postId: string) => {
-    if (!newCommentText.trim()) return;
+    if (!newCommentText.trim() && !commentAttachedFile) return;
     setPostingComment(true);
     try {
       const token = await getToken();
       if (!token) return;
-      await createPostComment(postId, newCommentText, token);
+
+      let attachmentUrl: string | undefined;
+      if (commentAttachedFile) {
+        const uploadRes = await uploadImage(commentAttachedFile, token);
+        attachmentUrl = uploadRes.image_url;
+      }
+
+      await createPostComment(postId, newCommentText, token, attachmentUrl);
       addToast('Đã đăng bình luận thành công! 💬', 'success');
       setNewCommentText('');
+      setCommentAttachedFile(null);
+      setCommentAttachedImage(null);
       fetchComments(postId);
     } catch (err) {
       addToast(`Lỗi đăng bình luận: ${err instanceof Error ? err.message : String(err)}`, 'error');
@@ -443,20 +511,94 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
                       disabled={postingComment}
                     />
 
-                    <button
-                      className="btn btn-sm btn-primary"
-                      onClick={() => handlePostComment(post.id)}
-                      disabled={postingComment || !newCommentText.trim()}
-                      style={{ alignSelf: 'flex-end', marginTop: '0.2rem' }}
-                    >
-                      {postingComment ? 'Đang gửi...' : 'Gửi bình luận 🚀'}
-                    </button>
+                    {/* Comment Image Attachment Preview */}
+                    {commentAttachedImage && (
+                      <div style={{ marginTop: '0.5rem', position: 'relative', display: 'inline-block', alignSelf: 'flex-start' }}>
+                        <img
+                          src={commentAttachedImage}
+                          alt="Comment attachment"
+                          style={{ maxHeight: '80px', borderRadius: '4px', border: '1px solid var(--border)' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCommentAttachedFile(null);
+                            setCommentAttachedImage(null);
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: '-6px',
+                            right: '-6px',
+                            width: '18px',
+                            height: '18px',
+                            borderRadius: '50%',
+                            background: '#ef4444',
+                            color: '#fff',
+                            border: 'none',
+                            fontSize: '10px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            padding: 0
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.2rem' }}>
+                      <div>
+                        <input
+                          type="file"
+                          id={`commentImage-${post.id}`}
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleImageSelect(file);
+                          }}
+                        />
+                        <label
+                          htmlFor={`commentImage-${post.id}`}
+                          className="btn btn-sm"
+                          style={{ cursor: 'pointer', fontSize: '0.78rem', padding: '0.35rem 0.6rem' }}
+                        >
+                          📷 Đính kèm ảnh
+                        </label>
+                      </div>
+
+                      <button
+                        className="btn btn-sm btn-primary"
+                        onClick={() => handlePostComment(post.id)}
+                        disabled={postingComment || (!newCommentText.trim() && !commentAttachedFile)}
+                      >
+                        {postingComment ? 'Đang gửi...' : 'Gửi bình luận 🚀'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
             </div>
           ))}
         </div>
+      )}
+      {/* Global Image Cropper Modal for Comments */}
+      {cropperSrc && (
+        <ImageCropperModal
+          cropperSrc={cropperSrc}
+          aspectRatio={aspectRatio}
+          setAspectRatio={setAspectRatio}
+          allowRatioSelection={false}
+          crop={crop}
+          zoom={zoom}
+          onCropChange={setCrop}
+          onZoomChange={setZoom}
+          onCropComplete={handleCropComplete}
+          onConfirm={handleCropConfirm}
+          onCancel={handleCropCancel}
+        />
       )}
     </div>
   );

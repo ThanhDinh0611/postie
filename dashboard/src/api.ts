@@ -394,11 +394,11 @@ export async function analyzePage(pageId: string, token: string): Promise<PageAn
 
 // ─── Comments API ─────────────────────────────────────────────────────────────
 
-export async function createPostComment(postId: string, message: string, token: string): Promise<{ success: boolean; facebookCommentId: string }> {
+export async function createPostComment(postId: string, message: string, token: string, attachmentUrl?: string): Promise<{ success: boolean; facebookCommentId: string }> {
   return fetchJson<{ success: boolean; facebookCommentId: string }>(`${API_BASE}/api/posts/${postId}/comments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, attachmentUrl }),
   });
 }
 
