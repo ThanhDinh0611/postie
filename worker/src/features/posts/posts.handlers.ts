@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { getUserIdFromRequest, authorizeFeature } from '../../core/auth.ts';
-import { generatePostContent } from '../../core/ai.ts';
+import { generatePostContent, generateCommentContent } from '../../core/ai.ts';
 import type { GenerateRequest } from '../../core/ai.ts';
-import { publishPost, buildPermalink, clearFacebookCache } from '../../core/facebook.ts';
+import { publishPost, buildPermalink, clearFacebookCache, getPostComments, createPostComment } from '../../core/facebook.ts';
 
 export const postsRouter = new Hono<{ Bindings: Env }>();
 
@@ -215,5 +215,119 @@ postsRouter.post('/posts/generate', async (c) => {
     return c.json({ ...result, generationId: genId });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : 'Generation failed' }, 500);
+  }
+});
+
+
+// POST /api/posts/:id/comments — Add a comment to a post using the Page account
+postsRouter.post('/posts/:id/comments', async (c) => {
+  const userId = await getUserIdFromRequest(c.req.raw, c.env);
+  if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+
+  const postId = c.req.param('id');
+  const post = await c.env.DB
+    .prepare('SELECT page_id, facebook_post_id, comments_count FROM posts WHERE id = ? AND user_id = ?')
+    .bind(postId, userId)
+    .first<{ page_id: string; facebook_post_id: string | null; comments_count: number }>();
+
+  if (!post) return c.json({ error: 'Post not found' }, 404);
+  if (!post.facebook_post_id) return c.json({ error: 'Cannot comment on an unpublished post' }, 400);
+
+  const page = await c.env.DB
+    .prepare('SELECT access_token FROM pages WHERE id = ?')
+    .bind(post.page_id)
+    .first<{ access_token: string }>();
+
+  if (!page) return c.json({ error: 'Page not found for this post' }, 404);
+
+  let body: { message: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+
+  if (!body.message || body.message.trim() === '') {
+    return c.json({ error: 'Comment message is required' }, 400);
+  }
+
+  try {
+    const result = await createPostComment(page.access_token, post.facebook_post_id, body.message);
+
+    // Increment comments count locally
+    await c.env.DB
+      .prepare('UPDATE posts SET comments_count = comments_count + 1 WHERE id = ?')
+      .bind(postId)
+      .run();
+
+    return c.json({ success: true, facebookCommentId: result.id });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : 'Failed to post comment' }, 500);
+  }
+});
+
+// POST /api/posts/:id/comments/generate — Generate AI comment content (with optional Clipy link)
+postsRouter.post('/posts/:id/comments/generate', async (c) => {
+  const userId = await getUserIdFromRequest(c.req.raw, c.env);
+  if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+
+  const postId = c.req.param('id');
+  const post = await c.env.DB
+    .prepare('SELECT message FROM posts WHERE id = ? AND user_id = ?')
+    .bind(postId, userId)
+    .first<{ message: string }>();
+
+  if (!post) return c.json({ error: 'Post not found' }, 404);
+
+  let body: {
+    useClipy: boolean;
+    targetUrl?: string;
+    linkTitle?: string;
+    linkDescription?: string;
+  };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+
+  try {
+    const aiResult = await generateCommentContent(post.message, c.env.DEEPSEEK_API_KEY);
+    let commentText = aiResult.comment;
+
+    // Handle Clipy link generation if requested
+    if (body.useClipy && body.targetUrl) {
+      if (!c.env.CLIPY_API_KEY) {
+        throw new Error('CLIPY_API_KEY is not configured on the server');
+      }
+      const clipyUrl = c.env.CLIPY_API_URL || 'https://clipy-worker.dct98.workers.dev/api';
+      const linkRes = await fetch(`${clipyUrl}/links`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${c.env.CLIPY_API_KEY}`
+        },
+        body: JSON.stringify({
+          target_url: body.targetUrl,
+          title: body.linkTitle || 'Explore Link',
+          description: body.linkDescription || 'Shared via Clipy',
+          image_url: ''
+        })
+      });
+
+      if (linkRes.ok) {
+        const linkData = await linkRes.json() as { short_code: string };
+        const baseRedirectUrl = clipyUrl.replace(/\/api$/, '');
+        const shortUrl = `${baseRedirectUrl}/${linkData.short_code}`;
+        commentText = `${commentText}\n\n👉 Xem ngay: ${shortUrl}`;
+      } else {
+        const errText = await linkRes.text();
+        throw new Error(`Clipy API Error: ${errText}`);
+      }
+    }
+
+    return c.json({ comment: commentText });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : 'Comment generation failed' }, 500);
   }
 });

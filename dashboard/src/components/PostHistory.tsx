@@ -1,6 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { getPosts, type PostData, type CampaignData, type PageData } from '../api.ts';
+import {
+  getPosts,
+  getPostComments,
+  createPostComment,
+  generateComment,
+  type PostData,
+  type CampaignData,
+  type PageData,
+  type CommentData
+} from '../api.ts';
 import { useToast } from '../hooks/useToast.tsx';
 
 interface PostHistoryProps {
@@ -22,6 +31,84 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
   const [campaignFilter, setCampaignFilter] = useState('all');
   const [sortBy, setSortBy] = useState('latest');
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+
+  // Comments & AI Assist states
+  const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
+  const [comments, setComments] = useState<CommentData[]>([]);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [newCommentText, setNewCommentText] = useState('');
+  const [postingComment, setPostingComment] = useState(false);
+
+  const [showAiAssist, setShowAiAssist] = useState(false);
+  const [useClipy, setUseClipy] = useState(false);
+  const [commentTargetUrl, setCommentTargetUrl] = useState('https://google.com');
+  const [commentLinkTitle, setCommentLinkTitle] = useState('');
+  const [commentLinkDescription, setCommentLinkDescription] = useState('');
+  const [generatingComment, setGeneratingComment] = useState(false);
+
+  const fetchComments = async (postId: string) => {
+    setLoadingComments(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const data = await getPostComments(postId, token);
+      setComments(data.comments || []);
+    } catch (err) {
+      addToast('Không thể tải bình luận từ Facebook.', 'error');
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  const handleToggleComments = (postId: string) => {
+    if (expandedPostId === postId) {
+      setExpandedPostId(null);
+      setComments([]);
+      setShowAiAssist(false);
+    } else {
+      setExpandedPostId(postId);
+      setNewCommentText('');
+      setShowAiAssist(false);
+      fetchComments(postId);
+    }
+  };
+
+  const handlePostComment = async (postId: string) => {
+    if (!newCommentText.trim()) return;
+    setPostingComment(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      await createPostComment(postId, newCommentText, token);
+      addToast('Đã đăng bình luận thành công! 💬', 'success');
+      setNewCommentText('');
+      fetchComments(postId);
+    } catch (err) {
+      addToast(`Lỗi đăng bình luận: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    } finally {
+      setPostingComment(false);
+    }
+  };
+
+  const handleGenerateComment = async (postId: string) => {
+    setGeneratingComment(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const result = await generateComment(postId, {
+        useClipy,
+        targetUrl: useClipy ? commentTargetUrl : undefined,
+        linkTitle: useClipy ? commentLinkTitle : undefined,
+        linkDescription: useClipy ? commentLinkDescription : undefined,
+      }, token);
+      setNewCommentText(result.comment);
+      addToast('Tạo bình luận AI thành công! 🤖', 'success');
+    } catch (err) {
+      addToast(`Lỗi tạo bình luận AI: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    } finally {
+      setGeneratingComment(false);
+    }
+  };
 
   // Set default page filter to the active page once pages are loaded
   useEffect(() => {
@@ -221,9 +308,152 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
                       {copyFeedback === post.permalink ? 'Copied!' : 'Copy'}
                     </button>
                     <a href={post.permalink} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-primary">Open</a>
+                    {post.status === 'Published' && (
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => handleToggleComments(post.id)}
+                        style={expandedPostId === post.id ? { background: 'var(--primary)', color: '#000', borderColor: 'var(--primary)' } : {}}
+                      >
+                        💬 {expandedPostId === post.id ? 'Đóng' : 'Bình luận'}
+                      </button>
+                    )}
                   </div>
                 ) : null}
               </div>
+
+              {/* Expanded Comments Section */}
+              {expandedPostId === post.id && (
+                <div className="comments-section">
+                  <div className="comments-title">
+                    <span>💬 Bình luận của trang ({comments.length})</span>
+                    <button className="btn btn-sm" onClick={() => fetchComments(post.id)} disabled={loadingComments}>
+                      🔄 {loadingComments ? 'Đang tải...' : 'Làm mới'}
+                    </button>
+                  </div>
+
+                  {loadingComments && comments.length === 0 ? (
+                    <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                      Đang tải bình luận...
+                    </div>
+                  ) : comments.length === 0 ? (
+                    <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                      Chưa có bình luận nào trên bài viết này.
+                    </div>
+                  ) : (
+                    <div className="comments-list">
+                      {comments.map((c) => (
+                        <div key={c.id} className="comment-item">
+                          <div className="comment-header">
+                            <span className="comment-author">👤 {c.from_name || 'Người dùng Facebook'}</span>
+                            {c.created_time && (
+                              <span className="comment-date">
+                                {new Date(c.created_time * 1000).toLocaleString('vi-VN')}
+                              </span>
+                            )}
+                          </div>
+                          <div className="comment-content">{c.message}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Comment Form */}
+                  <div className="comment-form">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                        Viết bình luận mới
+                      </label>
+                      <button
+                        className="btn btn-sm"
+                        style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
+                        onClick={() => setShowAiAssist(!showAiAssist)}
+                      >
+                        🪄 AI Trợ lý bình luận
+                      </button>
+                    </div>
+
+                    {/* AI Assist Drawer */}
+                    {showAiAssist && (
+                      <div className="ai-assist-box">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <input
+                            type="checkbox"
+                            id="commentUseClipy"
+                            checked={useClipy}
+                            onChange={(e) => setUseClipy(e.target.checked)}
+                          />
+                          <label htmlFor="commentUseClipy" style={{ fontSize: '0.75rem', fontWeight: 600, userSelect: 'none' }}>
+                            Đính kèm link rút gọn Clipy
+                          </label>
+                        </div>
+
+                        {useClipy && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.2rem' }}>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <input
+                                type="url"
+                                className="form-control"
+                                style={{ fontSize: '0.75rem', padding: '0.25rem 0.4rem' }}
+                                placeholder="Link đích (ví dụ: https://shopee.vn/...)"
+                                value={commentTargetUrl}
+                                onChange={(e) => setCommentTargetUrl(e.target.value)}
+                              />
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <input
+                                type="text"
+                                className="form-control"
+                                style={{ fontSize: '0.75rem', padding: '0.25rem 0.4rem' }}
+                                placeholder="Tiêu đề link (không bắt buộc)"
+                                value={commentLinkTitle}
+                                onChange={(e) => setCommentLinkTitle(e.target.value)}
+                              />
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <input
+                                type="text"
+                                className="form-control"
+                                style={{ fontSize: '0.75rem', padding: '0.25rem 0.4rem' }}
+                                placeholder="Mô tả link (không bắt buộc)"
+                                value={commentLinkDescription}
+                                onChange={(e) => setCommentLinkDescription(e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        <button
+                          className="btn btn-sm btn-primary"
+                          onClick={() => handleGenerateComment(post.id)}
+                          disabled={generatingComment || (useClipy && !commentTargetUrl)}
+                          style={{ alignSelf: 'flex-start', fontSize: '0.72rem', marginTop: '0.25rem' }}
+                        >
+                          {generatingComment ? '🤖 Đang tạo bình luận...' : '🤖 Viết bình luận bằng AI'}
+                        </button>
+                      </div>
+                    )}
+
+                    <textarea
+                      rows={3}
+                      className="form-control"
+                      placeholder="Nhập nội dung bình luận của bạn tại đây..."
+                      style={{ fontSize: '0.82rem', resize: 'vertical' }}
+                      value={newCommentText}
+                      onChange={(e) => setNewCommentText(e.target.value)}
+                      disabled={postingComment}
+                    />
+
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => handlePostComment(post.id)}
+                      disabled={postingComment || !newCommentText.trim()}
+                      style={{ alignSelf: 'flex-end', marginTop: '0.2rem' }}
+                    >
+                      {postingComment ? 'Đang gửi...' : 'Gửi bình luận 🚀'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

@@ -281,3 +281,26 @@ export async function clearFacebookCache(accessToken: string, url: string): Prom
   });
   return res.ok;
 }
+
+/**
+ * Post a comment on a Facebook post using the Page access token.
+ */
+export async function createPostComment(
+  pageAccessToken: string,
+  facebookPostId: string,
+  message: string,
+): Promise<{ id: string }> {
+  const url = `${GRAPH_API_BASE}/${facebookPostId}/comments`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      message,
+      access_token: pageAccessToken,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to create comment: ${res.status} ${await res.text()}`);
+  }
+  return res.json() as Promise<{ id: string }>;
+}

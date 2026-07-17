@@ -391,3 +391,25 @@ export async function analyzePage(pageId: string, token: string): Promise<PageAn
     headers: authHeaders(token),
   });
 }
+
+// ─── Comments API ─────────────────────────────────────────────────────────────
+
+export async function createPostComment(postId: string, message: string, token: string): Promise<{ success: boolean; facebookCommentId: string }> {
+  return fetchJson<{ success: boolean; facebookCommentId: string }>(`${API_BASE}/api/posts/${postId}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+    body: JSON.stringify({ message }),
+  });
+}
+
+export async function generateComment(
+  postId: string,
+  params: { useClipy: boolean; targetUrl?: string; linkTitle?: string; linkDescription?: string },
+  token: string
+): Promise<{ comment: string }> {
+  return fetchJson<{ comment: string }>(`${API_BASE}/api/posts/${postId}/comments/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+    body: JSON.stringify(params),
+  });
+}

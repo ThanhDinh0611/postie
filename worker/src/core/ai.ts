@@ -416,5 +416,57 @@ Trả về kết quả trong thẻ XML <page_analysis>...</page_analysis> tuân 
   }
 }
 
+export async function generateCommentContent(
+  postContent: string,
+  apiKey: string,
+): Promise<{ comment: string }> {
+  if (!apiKey) {
+    return {
+      comment: `Bài viết rất hữu ích! Mọi người nên tham khảo thông tin này nhé. 👍`,
+    };
+  }
+
+  const prompt = `Bạn là một nhà sáng tạo nội dung mạng xã hội chuyên nghiệp. 
+Hãy viết một bình luận hấp dẫn, ngắn gọn (dưới 150 ký tự) bằng tiếng Việt cho bài viết Facebook sau đây.
+Giọng điệu bình luận: Thân thiện, kích thích sự tò mò và khích lệ người đọc.
+Yêu cầu:
+1. KHÔNG dùng các từ cấm hay spam.
+2. Trực quan bằng emoji nhưng không lạm dụng (1-2 emoji).
+3. KHÔNG tự trả lời thay cho thương hiệu mà bình luận như một thành viên hoặc đại diện trang chia sẻ thêm giá trị.
+4. Trả về TRỰC TIẾP nội dung bình luận, không chứa bất kỳ văn bản giải thích hay đóng mở ngoặc nào.
+
+BÀI VIẾT:
+"${postContent}"`;
+
+  const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'deepseek-v4-flash',
+      messages: [
+        { role: 'system', content: 'Bạn là chuyên gia viết bình luận Facebook chuyên nghiệp, ngắn gọn bằng tiếng Việt.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.8,
+      max_tokens: 300,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`DeepSeek API error: ${response.status} ${await response.text()}`);
+  }
+
+  const data = (await response.json()) as {
+    choices: Array<{ message: { content: string } }>;
+  };
+
+  return {
+    comment: data.choices[0]?.message?.content?.trim() ?? '',
+  };
+}
+
 export { VIETNAMESE_HOOKS, FORMULAS, TONES };
 
