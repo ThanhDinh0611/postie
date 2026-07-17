@@ -292,8 +292,13 @@ syncRouter.post('/webhooks/facebook', async (c) => {
       console.log(`Webhook feed event: item=${item}, verb=${verb}`);
 
       if (item === 'post' || item === 'status' || item === 'photo' || item === 'video') {
-        const facebookPostId = val.post_id || val.id;
+        let facebookPostId = val.post_id || val.id;
         if (!facebookPostId) continue;
+
+        // Ensure facebookPostId has the PAGEID_ prefix
+        if (!facebookPostId.includes('_')) {
+          facebookPostId = `${facebookPageId}_${facebookPostId}`;
+        }
 
         if (verb === 'add') {
           // Check if post already exists
@@ -305,10 +310,24 @@ syncRouter.post('/webhooks/facebook', async (c) => {
           if (!existing) {
             const postId = crypto.randomUUID();
             const message = val.message || '';
-            const createdTime = val.created_time || Math.floor(Date.now() / 1000);
             
-            // Build permalink if possible or query Facebook later. Let's make a standard format
-            const permalink = `https://www.facebook.com/${facebookPageId}/posts/${facebookPostId.split('_')[1] || facebookPostId}`;
+            // Robust timestamp parser
+            let createdTime = Math.floor(Date.now() / 1000);
+            if (val.created_time) {
+              if (typeof val.created_time === 'number') {
+                createdTime = val.created_time;
+              } else if (!isNaN(Number(val.created_time))) {
+                createdTime = Number(val.created_time);
+              } else {
+                const parsedDate = new Date(val.created_time);
+                if (!isNaN(parsedDate.getTime())) {
+                  createdTime = Math.floor(parsedDate.getTime() / 1000);
+                }
+              }
+            }
+
+            const postShortId = facebookPostId.split('_')[1] || facebookPostId;
+            const permalink = `https://www.facebook.com/${facebookPageId}/posts/${postShortId}`;
 
             statements.push(c.env.DB.prepare(`
               INSERT INTO posts(id, page_id, facebook_post_id, permalink, message, post_format, status, created_at, published_at, user_id, last_synced_at)
@@ -332,8 +351,10 @@ syncRouter.post('/webhooks/facebook', async (c) => {
         const facebookCommentId = val.comment_id || val.id;
         let facebookPostId = val.post_id;
         
-        // Extract post ID from comment ID prefix if not provided in post_id (often happens on deletes)
-        if (!facebookPostId && facebookCommentId) {
+        // Ensure facebookPostId has the PAGEID_ prefix
+        if (facebookPostId && !facebookPostId.includes('_')) {
+          facebookPostId = `${facebookPageId}_${facebookPostId}`;
+        } else if (!facebookPostId && facebookCommentId) {
           const parts = facebookCommentId.split('_');
           if (parts.length >= 2) {
             facebookPostId = `${parts[0]}_${parts[1]}`;
@@ -360,7 +381,21 @@ syncRouter.post('/webhooks/facebook', async (c) => {
               const message = val.message || '';
               const fromName = val.sender_name || null;
               const fromId = val.sender_id || null;
-              const createdTime = val.created_time || Math.floor(Date.now() / 1000);
+
+              let createdTime = Math.floor(Date.now() / 1000);
+              if (val.created_time) {
+                if (typeof val.created_time === 'number') {
+                  createdTime = val.created_time;
+                } else if (!isNaN(Number(val.created_time))) {
+                  createdTime = Number(val.created_time);
+                } else {
+                  const parsedDate = new Date(val.created_time);
+                  if (!isNaN(parsedDate.getTime())) {
+                    createdTime = Math.floor(parsedDate.getTime() / 1000);
+                  }
+                }
+              }
+
               const parentId = val.parent_id || null;
 
               statements.push(c.env.DB.prepare(`
