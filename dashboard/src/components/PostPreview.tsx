@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { uploadImage, type PageData } from '../api.ts';
+import { compressImage } from '../utils/image.ts';
 
 interface PostPreviewProps {
   content: string;
@@ -42,7 +43,10 @@ export default function PostPreview({
       const token = await getToken();
       if (!token) throw new Error('Unauthorized');
       
-      const res = await uploadImage(file, token);
+      // Optimize: Compress image client-side before uploading to R2 to save storage/bandwidth
+      const compressedFile = await compressImage(file);
+      
+      const res = await uploadImage(compressedFile, token);
       setAttachedImage(res.image_url);
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Tải ảnh lên thất bại');
