@@ -3,6 +3,7 @@ import type { PageData } from '../api.ts';
 
 interface PublishModalProps {
   content: string;
+  mediaUrl?: string;
   pages: PageData[];
   selectedPageId: string;
   isPublishing: boolean;
@@ -12,6 +13,7 @@ interface PublishModalProps {
 
 export default function PublishModal({
   content,
+  mediaUrl,
   pages,
   selectedPageId,
   isPublishing,
@@ -48,10 +50,10 @@ export default function PublishModal({
       onClick={(e) => { if (e.target === e.currentTarget && !isPublishing) onCancel(); }}
     >
       <div
+        className="modal-content"
         style={{
-          background: 'var(--bg-card)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius)', width: '100%', maxWidth: 540,
-          maxHeight: '90vh', overflowY: 'auto', padding: '1.75rem',
+          margin: 'auto',
+          maxWidth: 540,
           display: 'flex', flexDirection: 'column', gap: '1.25rem',
         }}
       >
@@ -96,12 +98,24 @@ export default function PublishModal({
               background: 'var(--bg-secondary)', border: '1px solid var(--border)',
               borderRadius: 'var(--radius-sm)', padding: '0.75rem', fontSize: '0.85rem',
               whiteSpace: 'pre-wrap', color: 'var(--text-secondary)',
-              maxHeight: '200px', overflowY: 'auto', lineHeight: 1.5,
+              maxHeight: '150px', overflowY: 'auto', lineHeight: 1.5,
             }}
           >
             {content}
           </div>
         </div>
+
+        {/* Image preview */}
+        {mediaUrl && (
+          <div>
+            <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem' }}>
+              HÌNH ẢNH ĐÍNH KÈM
+            </label>
+            <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.5rem', display: 'flex', justifyContent: 'center' }}>
+              <img src={mediaUrl} alt="Preview" style={{ maxWidth: '100%', maxHeight: '140px', objectFit: 'contain', borderRadius: 4 }} />
+            </div>
+          </div>
+        )}
 
         {/* Schedule option */}
         <div>

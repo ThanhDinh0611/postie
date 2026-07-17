@@ -67,6 +67,7 @@ function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campa
   const [isPublishing, setIsPublishing] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [publishContent, setPublishContent] = useState('');
+  const [publishMediaUrl, setPublishMediaUrl] = useState<string | undefined>(undefined);
   const [generationResult, setGenerationResult] = useState<GenerateResponse | null>(null);
   const [publishResult, setPublishResult] = useState<PublishResponse | null>(null);
   const [selectedPageId, setSelectedPageId] = useState('');
@@ -111,12 +112,13 @@ function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campa
   };
 
   // Show publish confirmation modal
-  const handleShowPublishModal = (finalContent: string) => {
+  const handleShowPublishModal = (finalContent: string, mediaUrl?: string) => {
     if (!selectedPageId) {
       alert('⚠️ Vui lòng chọn Fanpage để đăng bài!');
       return;
     }
     setPublishContent(finalContent);
+    setPublishMediaUrl(mediaUrl);
     setShowPublishModal(true);
   };
 
@@ -135,6 +137,7 @@ function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campa
         scheduledAt,
         campaignId: selectedCampaignId,
         generationId: generationResult?.generationId ?? undefined,
+        mediaUrl: publishMediaUrl,
       }, token);
       setPublishResult(result);
       setShowPublishModal(false);
@@ -150,6 +153,7 @@ function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campa
     setGenerationResult(null);
     setPublishResult(null);
     setSelectedCampaignId(undefined);
+    setPublishMediaUrl(undefined);
   };
 
   return (
@@ -161,6 +165,7 @@ function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campa
       {showPublishModal && (
         <PublishModal
           content={publishContent}
+          mediaUrl={publishMediaUrl}
           pages={pages}
           selectedPageId={selectedPageId}
           isPublishing={isPublishing}
