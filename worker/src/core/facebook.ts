@@ -309,3 +309,24 @@ export async function createPostComment(
   }
   return res.json() as Promise<{ id: string }>;
 }
+
+/**
+ * Subscribe the Facebook App to Page Webhooks (specifically 'feed' field).
+ */
+export async function subscribePageToApp(pageAccessToken: string, facebookPageId: string): Promise<boolean> {
+  const url = `${GRAPH_API_BASE}/${facebookPageId}/subscribed_apps`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      access_token: pageAccessToken,
+      subscribed_fields: 'feed',
+    }),
+  });
+  if (!res.ok) {
+    console.error(`Failed to subscribe Page ${facebookPageId} to App:`, await res.text());
+    return false;
+  }
+  const result = await res.json() as { success?: boolean };
+  return !!result.success;
+}

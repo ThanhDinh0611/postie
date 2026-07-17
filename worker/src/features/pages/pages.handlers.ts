@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { getUserIdFromRequest } from '../../core/auth.ts';
-import { exchangeCodeForToken, getLongLivedToken, getUserPages } from '../../core/facebook.ts';
+import { exchangeCodeForToken, getLongLivedToken, getUserPages, subscribePageToApp } from '../../core/facebook.ts';
 import { analyzePageContent } from '../../core/ai.ts';
 
 export const pagesRouter = new Hono<{ Bindings: Env }>();
@@ -40,6 +40,14 @@ pagesRouter.post('/pages/oauth', async (c) => {
         )
         .bind(id, page.id, page.name, page.username ?? null, page.access_token, page.picture?.data?.url ?? null, userId)
       );
+      
+      // Subscribe the Facebook App to this page's webhooks
+      try {
+        await subscribePageToApp(page.access_token, page.id);
+      } catch (err) {
+        console.error(`Failed to subscribe Page ${page.id} on OAuth connection:`, err);
+      }
+
       saved.push({ id, name: page.name, username: page.username, avatarUrl: page.picture?.data?.url });
     }
 
@@ -89,12 +97,19 @@ pagesRouter.post('/pages/:id/select', async (c) => {
   if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
   const pageId = c.req.param('id');
-  const existing = await c.env.DB
-    .prepare('SELECT id FROM pages WHERE id = ? AND user_id = ?')
+  const page = await c.env.DB
+    .prepare('SELECT facebook_page_id, access_token FROM pages WHERE id = ? AND user_id = ?')
     .bind(pageId, userId)
-    .first();
+    .first<{ facebook_page_id: string; access_token: string }>();
 
-  if (!existing) return c.json({ error: 'Page not found' }, 404);
+  if (!page) return c.json({ error: 'Page not found' }, 404);
+
+  // Subscribe page to Webhooks (self-healing hook registration)
+  try {
+    await subscribePageToApp(page.access_token, page.facebook_page_id);
+  } catch (err) {
+    console.error('Failed to subscribe Page webhooks:', err);
+  }
 
   // Optimize: Batch deactivation and activation writes in a single D1 roundtrip
   await c.env.DB.batch([
