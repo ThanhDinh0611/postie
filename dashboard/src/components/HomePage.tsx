@@ -54,51 +54,7 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
     }
   }, [pages, selectedPageId]);
 
-  // Load draft from localStorage on mount
-  useEffect(() => {
-    const key = 'postie_global_draft';
-    const stored = localStorage.getItem(key);
-    
-    if (stored) {
-      try {
-        const data = JSON.parse(stored);
-        setTopic(data.topic ?? '');
-        setHookType(data.hookType ?? '1. Sự thật thú vị (Interesting fact)');
-        setFormula(data.formula ?? 'PAS (Problem-Agitation-Solution)');
-        setTone(data.tone ?? 'Friendly');
-        setPostFormat(data.postFormat ?? 'Post');
-        setSelectedCampaignId(data.campaignId ?? '');
-        setGenerationResult(data.generationResult ?? null);
-        
-        // Clean temporary blob URLs on load since local URLs expire on browser refresh
-        const img = data.attachedImage ?? null;
-        if (img && img.startsWith('blob:')) {
-          setAttachedImage(null);
-          setAttachedFile(null);
-        } else {
-          setAttachedImage(img);
-        }
-      } catch (err) {
-        console.error('Failed to parse draft from localStorage:', err);
-      }
-    }
-  }, []);
 
-  // Save draft to localStorage when states change
-  useEffect(() => {
-    const key = 'postie_global_draft';
-    const data = {
-      topic,
-      hookType,
-      formula,
-      tone,
-      postFormat,
-      campaignId: selectedCampaignId,
-      generationResult,
-      attachedImage: attachedImage && !attachedImage.startsWith('blob:') ? attachedImage : null
-    };
-    localStorage.setItem(key, JSON.stringify(data));
-  }, [topic, hookType, formula, tone, postFormat, selectedCampaignId, generationResult, attachedImage]);
 
   const handleGenerate = async (data: {
     topic: string;
@@ -168,7 +124,6 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
       setAttachedImage(null);
       setAttachedFile(null);
       setTopic('');
-      localStorage.removeItem('postie_global_draft');
 
       setPublishResult(result);
       setShowPublishModal(false);
@@ -187,7 +142,6 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
     setAttachedFile(null);
     setPublishMediaUrl(undefined);
     setTopic('');
-    localStorage.removeItem('postie_global_draft');
   };
 
   return (
