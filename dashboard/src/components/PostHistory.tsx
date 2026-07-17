@@ -183,7 +183,6 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
   };
 
   const handleDeletePost = async (postId: string) => {
-    if (!window.confirm("Bạn có chắc chắn muốn xóa bài viết này khỏi Facebook và hệ thống?")) return;
     try {
       const token = await getToken();
       if (!token) return;
@@ -199,7 +198,6 @@ export default function PostHistory({ initialPosts, pages = [], campaigns = [], 
   };
 
   const handleDeleteComment = async (postId: string, commentId: string) => {
-    if (!window.confirm("Bạn có chắc chắn muốn xóa bình luận này trên Facebook?")) return;
     try {
       const token = await getToken();
       if (!token) return;
