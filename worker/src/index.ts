@@ -22,6 +22,8 @@ declare global {
     BANK_BIN?: string;
     BANK_ACCOUNT?: string;
     BANK_ACCOUNT_NAME?: string;
+    CLIPY_API_KEY?: string;
+    CLIPY_API_URL?: string;
   }
 }
 

@@ -85,7 +85,6 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
       }, token);
       
       setGenerationResult(result);
-      // Retrieve AI-generated card details
       setLinkTitle(result.linkTitle ?? '');
       setLinkDescription(result.linkDescription ?? '');
     } catch (err) {
@@ -107,72 +106,25 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
 
   const handleConfirmPublish = async (finalContent: string, scheduledAt?: number) => {
     setIsPublishing(true);
-    setPublishProgress('⏳ Đang khởi tạo tiến trình đăng bài...');
+    setPublishProgress('⏳ Đang chuẩn bị tiến trình đăng...');
     try {
       const token = await getToken();
       if (!token) throw new Error('Unauthorized');
 
       let finalMediaUrl = publishMediaUrl;
-      let shortUrl = '';
 
-      if (publishType === 'image') {
-        // Image Post Flow: Upload to Postie R2
-        if (attachedFile) {
-          setPublishProgress('🖼️ Đang tải hình ảnh lên Postie R2...');
-          const uploadRes = await uploadImage(attachedFile, token);
-          finalMediaUrl = uploadRes.image_url;
-        }
-      } else if (publishType === 'link') {
-        // Clipy Link Post Flow:
-        let clipyImageUrl = '';
-        if (attachedFile) {
-          setPublishProgress('🖼️ Đang tải hình ảnh lên Clipy R2...');
-          const formData = new FormData();
-          formData.append('image', attachedFile);
-          
-          const uploadRes = await fetch('https://clipy-worker.dct98.workers.dev/api/upload', {
-            method: 'POST',
-            body: formData
-          });
-          if (!uploadRes.ok) {
-            throw new Error(`Clipy R2 upload failed with status ${uploadRes.status}`);
-          }
-          const uploadData = await uploadRes.json() as { image_url: string };
-          clipyImageUrl = uploadData.image_url;
-        }
-
-        setPublishProgress('🔗 Đang rút gọn link qua Clipy API...');
-        const linkRes = await fetch('https://clipy-worker.dct98.workers.dev/api/links', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer cl_live_rA84GqkCnTdxqFWtCYgPobKL7NJwzXUb'
-          },
-          body: JSON.stringify({
-            target_url: targetUrl || 'https://google.com',
-            title: linkTitle || topic.slice(0, 60),
-            description: linkDescription || 'Shared via Clipy',
-            image_url: clipyImageUrl
-          })
-        });
-
-        if (!linkRes.ok) {
-          const errMsg = await linkRes.text();
-          throw new Error(`Lỗi tạo link Clipy: ${linkRes.status} ${errMsg}`);
-        }
-        
-        const linkData = await linkRes.json() as { short_code: string };
-        shortUrl = `https://clipy-worker.dct98.workers.dev/${linkData.short_code}`;
+      // 1. Unify file uploads — backend securely takes care of forwarding the image to Clipy
+      if (attachedFile) {
+        setPublishProgress('🖼️ Đang tải hình ảnh lên hệ thống...');
+        const uploadRes = await uploadImage(attachedFile, token);
+        finalMediaUrl = uploadRes.image_url;
       }
 
       setPublishProgress('📢 Đang xuất bản bài đăng lên Facebook...');
-      
-      const messageContent = publishType === 'link' && shortUrl
-        ? `${finalContent}\n\n👉 Chi tiết xem tại: ${shortUrl}`
-        : finalContent;
 
+      // 2. Publish post payload with Clipy config handled securely on the backend worker
       const result = await publishPost({
-        content: messageContent,
+        content: finalContent,
         pageId: selectedPageId,
         hookType: generationResult?.selectedHook,
         formula: generationResult?.formulaApplied,
@@ -180,7 +132,11 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
         scheduledAt,
         campaignId: selectedCampaignId || undefined,
         generationId: generationResult?.generationId ?? undefined,
-        mediaUrl: publishType === 'image' ? finalMediaUrl : undefined, // Don't pass mediaUrl if link post (Facebook parses link OG image instead)
+        mediaUrl: finalMediaUrl,
+        publishType,
+        targetUrl: publishType === 'link' ? targetUrl : undefined,
+        linkTitle: publishType === 'link' ? linkTitle : undefined,
+        linkDescription: publishType === 'link' ? linkDescription : undefined,
       }, token);
 
       // Clear draft on successful publish

@@ -17,9 +17,20 @@ postsRouter.post('/posts/publish', async (c) => {
   if (!authResult.authorized) return c.json({ error: authResult.reason }, 403);
 
   let body: {
-    content: string; pageId?: string; mediaUrl?: string; scheduledAt?: number;
-    hookType?: string; formula?: string; tone?: string; postFormat?: string;
-    campaignId?: string; generationId?: string;
+    content: string;
+    pageId?: string;
+    mediaUrl?: string;
+    scheduledAt?: number;
+    hookType?: string;
+    formula?: string;
+    tone?: string;
+    postFormat?: string;
+    campaignId?: string;
+    generationId?: string;
+    publishType?: 'image' | 'link';
+    targetUrl?: string;
+    linkTitle?: string;
+    linkDescription?: string;
   };
   try { body = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
   if (!body.content) return c.json({ error: 'content is required' }, 400);
@@ -41,17 +52,51 @@ postsRouter.post('/posts/publish', async (c) => {
     .first<{ id: string; facebook_page_id: string; name: string; username: string | null; access_token: string }>();
   if (!page) return c.json({ error: 'Page not found' }, 404);
 
+  // Securely handle Clipy short-link generation on the backend
+  let shortUrl = '';
+  if (body.publishType === 'link' && c.env.CLIPY_API_KEY) {
+    const clipyUrl = c.env.CLIPY_API_URL || 'https://clipy-worker.dct98.workers.dev/api';
+    try {
+      const linkRes = await fetch(`${clipyUrl}/links`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${c.env.CLIPY_API_KEY}`
+        },
+        body: JSON.stringify({
+          target_url: body.targetUrl || 'https://google.com',
+          title: body.linkTitle || body.content.slice(0, 60),
+          description: body.linkDescription || 'Shared via Clipy',
+          image_url: body.mediaUrl || ''
+        })
+      });
+      if (linkRes.ok) {
+        const linkData = await linkRes.json() as { short_code: string };
+        const baseRedirectUrl = clipyUrl.replace(/\/api$/, '');
+        shortUrl = `${baseRedirectUrl}/${linkData.short_code}`;
+      } else {
+        console.error('Failed to generate Clipy link:', await linkRes.text());
+      }
+    } catch (e) {
+      console.error('Error calling Clipy API:', e);
+    }
+  }
+
+  const finalContent = shortUrl ? `${body.content}\n\n👉 Chi tiết xem tại: ${shortUrl}` : body.content;
+  // If link post, Facebook parses target OG metadata; don't attach raw mediaUrl to make a standalone photo post
+  const fbMediaUrl = body.publishType === 'image' ? body.mediaUrl : undefined;
+
   try {
-    const fbResult = await publishPost(page.access_token, page.facebook_page_id, body.content, body.mediaUrl, body.scheduledAt);
+    const fbResult = await publishPost(page.access_token, page.facebook_page_id, finalContent, fbMediaUrl, body.scheduledAt);
     const permalink = buildPermalink(page.username ?? page.facebook_page_id, fbResult.id);
 
     const postId = crypto.randomUUID();
     await c.env.DB
       .prepare(
-        `INSERT INTO posts (id, page_id, facebook_post_id, permalink, message, media_url, hook_type, copywriting_formula, tone, post_format, status, scheduled_for, published_at, user_id, campaign_id, generation_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         `INSERT INTO posts (id, page_id, facebook_post_id, permalink, message, media_url, hook_type, copywriting_formula, tone, post_format, status, scheduled_for, published_at, user_id, campaign_id, generation_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(postId, page.id, fbResult.id, permalink, body.content,
+      .bind(postId, page.id, fbResult.id, permalink, finalContent,
         body.mediaUrl ?? null, body.hookType ?? null, body.formula ?? null,
         body.tone ?? 'Friendly', body.postFormat ?? 'Post',
         body.scheduledAt ? 'Scheduled' : 'Published',

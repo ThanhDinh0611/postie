@@ -108,6 +108,10 @@ export interface PublishRequest {
   postFormat?: string;
   campaignId?: string;
   generationId?: string;
+  publishType?: 'image' | 'link';
+  targetUrl?: string;
+  linkTitle?: string;
+  linkDescription?: string;
 }
 
 export interface PublishResponse {
