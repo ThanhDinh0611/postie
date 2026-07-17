@@ -1,17 +1,18 @@
 import { useState } from 'react';
-import { useAuth } from '@clerk/clerk-react';
-import { uploadImage, type PageData } from '../api.ts';
 import { compressImage } from '../utils/image.ts';
+import type { PageData } from '../api.ts';
 
 interface PostPreviewProps {
   content: string;
   isPublishing: boolean;
-  onPublish: (finalContent: string, mediaUrl?: string) => void;
+  onPublish: (finalContent: string) => void;
   pages: PageData[];
   selectedPageId: string;
   setSelectedPageId: (id: string) => void;
   attachedImage: string | null;
   setAttachedImage: (url: string | null) => void;
+  attachedFile: File | null;
+  setAttachedFile: (file: File | null) => void;
 }
 
 export default function PostPreview({
@@ -22,41 +23,43 @@ export default function PostPreview({
   selectedPageId,
   setSelectedPageId,
   attachedImage,
-  setAttachedImage
+  setAttachedImage,
+  attachedFile,
+  setAttachedFile,
 }: PostPreviewProps) {
-  const { getToken } = useAuth();
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [processError, setProcessError] = useState<string | null>(null);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(content);
     alert('📋 Đã sao chép nội dung vào khay nhớ tạm!');
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setIsUploading(true);
-    setUploadError(null);
+    setIsCompressing(true);
+    setProcessError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('Unauthorized');
-      
-      // Optimize: Compress image client-side before uploading to R2 to save storage/bandwidth
+      // Optimize: Compress image client-side before creating preview URL
       const compressedFile = await compressImage(file);
+      setAttachedFile(compressedFile);
       
-      const res = await uploadImage(compressedFile, token);
-      setAttachedImage(res.image_url);
+      // Create local object URL for previewing without uploading to R2 yet
+      const localUrl = URL.createObjectURL(compressedFile);
+      setAttachedImage(localUrl);
     } catch (err) {
-      setUploadError(err instanceof Error ? err.message : 'Tải ảnh lên thất bại');
+      setProcessError(err instanceof Error ? err.message : 'Xử lý ảnh thất bại');
     } finally {
-      setIsUploading(false);
+      setIsCompressing(false);
     }
   };
 
   const handleRemoveImage = () => {
     setAttachedImage(null);
+    setAttachedFile(null);
+    setProcessError(null);
   };
 
   return (
@@ -99,7 +102,7 @@ export default function PostPreview({
       <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         <div>
           <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>
-            🖼️ Đính kèm hình ảnh (R2 Storage)
+            🖼️ Đính kèm hình ảnh
           </label>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <input
@@ -107,8 +110,8 @@ export default function PostPreview({
               accept="image/*"
               id="image-attachment"
               style={{ display: 'none' }}
-              onChange={handleImageUpload}
-              disabled={isUploading || isPublishing}
+              onChange={handleImageSelect}
+              disabled={isCompressing || isPublishing}
             />
             <label
               htmlFor="image-attachment"
@@ -116,18 +119,18 @@ export default function PostPreview({
               style={{
                 cursor: 'pointer', background: 'var(--bg-secondary)',
                 color: 'var(--text-secondary)', display: 'inline-flex',
-                alignItems: 'center', gap: '0.35rem', pointerEvents: isUploading || isPublishing ? 'none' : 'auto',
-                opacity: isUploading || isPublishing ? 0.6 : 1
+                alignItems: 'center', gap: '0.35rem', pointerEvents: isCompressing || isPublishing ? 'none' : 'auto',
+                opacity: isCompressing || isPublishing ? 0.6 : 1
               }}
             >
-              {isUploading ? '⏳ Đang tải lên...' : '📁 Chọn ảnh từ thiết bị'}
+              {isCompressing ? '⏳ Đang xử lý ảnh...' : '📁 Chọn ảnh từ thiết bị'}
             </label>
-            {attachedImage && (
+            {attachedFile && (
               <span style={{ fontSize: '0.75rem', color: 'var(--success)' }}>✓ Đã đính kèm ảnh</span>
             )}
           </div>
-          {uploadError && (
-            <div style={{ color: 'var(--danger)', fontSize: '0.75rem', marginTop: '0.35rem' }}>⚠️ {uploadError}</div>
+          {processError && (
+            <div style={{ color: 'var(--danger)', fontSize: '0.75rem', marginTop: '0.35rem' }}>⚠️ {processError}</div>
           )}
         </div>
 
@@ -158,8 +161,8 @@ export default function PostPreview({
         <button
           className="btn btn-primary"
           style={{ width: '100%', justifyContent: 'center', padding: '0.75rem' }}
-          onClick={() => onPublish(content, attachedImage || undefined)}
-          disabled={isPublishing || isUploading || pages.length === 0 || !selectedPageId}
+          onClick={() => onPublish(content)}
+          disabled={isPublishing || isCompressing || pages.length === 0 || !selectedPageId}
         >
           {isPublishing ? '⏳ Đang đăng bài lên Facebook...' : 'Đăng lên Fanpage ngay 🚀'}
         </button>

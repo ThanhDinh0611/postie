@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 're
 import { ClerkProvider, SignedIn, SignedOut, UserButton, useAuth, useUser, SignIn, SignUp, SignOutButton, RedirectToSignIn, AuthenticateWithRedirectCallback } from '@clerk/clerk-react';
 import { dark } from '@clerk/themes';
 import {
-  getPages, getPosts, generatePost, publishPost, syncAuthUser, getCampaigns,
+  getPages, getPosts, generatePost, publishPost, syncAuthUser, getCampaigns, uploadImage,
   type PageData, type PostData, type GenerateResponse, type PublishResponse, type CampaignData
 } from './api.ts';
 import PostGenerator from './components/PostGenerator.tsx';
@@ -76,6 +76,7 @@ function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campa
   const [selectedCampaignId, setSelectedCampaignId] = useState('');
   const [generationResult, setGenerationResult] = useState<GenerateResponse | null>(null);
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
 
   // Volatile Action States
   const [isGenerating, setIsGenerating] = useState(false);
@@ -109,7 +110,15 @@ function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campa
         setPostFormat(data.postFormat ?? 'Post');
         setSelectedCampaignId(data.campaignId ?? '');
         setGenerationResult(data.generationResult ?? null);
-        setAttachedImage(data.attachedImage ?? null);
+        
+        // Clean temporary blob URLs on load since local URLs expire on browser refresh
+        const img = data.attachedImage ?? null;
+        if (img && img.startsWith('blob:')) {
+          setAttachedImage(null);
+          setAttachedFile(null);
+        } else {
+          setAttachedImage(img);
+        }
       } catch (err) {
         console.error('Failed to parse draft from localStorage:', err);
       }
@@ -123,6 +132,7 @@ function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campa
       setSelectedCampaignId('');
       setGenerationResult(null);
       setAttachedImage(null);
+      setAttachedFile(null);
     }
   }, [selectedPageId]);
 
@@ -186,6 +196,14 @@ function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campa
     try {
       const token = await getToken();
       if (!token) throw new Error('Unauthorized');
+
+      let finalMediaUrl = publishMediaUrl;
+      // Perform client-side R2 upload here when confirming publish
+      if (attachedFile) {
+        const uploadRes = await uploadImage(attachedFile, token);
+        finalMediaUrl = uploadRes.image_url;
+      }
+
       const result = await publishPost({
         content: finalContent,
         pageId: selectedPageId,
@@ -195,12 +213,13 @@ function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campa
         scheduledAt,
         campaignId: selectedCampaignId || undefined,
         generationId: generationResult?.generationId ?? undefined,
-        mediaUrl: publishMediaUrl,
+        mediaUrl: finalMediaUrl,
       }, token);
 
       // Clear draft on successful publish
       setGenerationResult(null);
       setAttachedImage(null);
+      setAttachedFile(null);
       setTopic('');
       if (selectedPageId) {
         localStorage.removeItem(`postie_draft_page_${selectedPageId}`);
@@ -220,6 +239,7 @@ function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campa
     setGenerationResult(null);
     setPublishResult(null);
     setAttachedImage(null);
+    setAttachedFile(null);
     setPublishMediaUrl(undefined);
     setTopic('');
     if (selectedPageId) {
@@ -280,6 +300,8 @@ function HomePage({ pages, campaigns, onDataChange }: { pages: PageData[]; campa
               setSelectedPageId={setSelectedPageId}
               attachedImage={attachedImage}
               setAttachedImage={setAttachedImage}
+              attachedFile={attachedFile}
+              setAttachedFile={setAttachedFile}
             />
           ) : (
             <div className="preview-card" style={{ justifyContent: 'center', alignItems: 'center', minHeight: '300px', color: 'var(--text-muted)' }}>
