@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import {
   generatePost,
@@ -45,6 +45,8 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
   const [publishMediaUrl, setPublishMediaUrl] = useState<string | undefined>(undefined);
   const [publishResult, setPublishResult] = useState<PublishResponse | null>(null);
 
+  const loadedPageIdRef = useRef(selectedPageId);
+
   // Set default active page
   useEffect(() => {
     if (pages.length > 0 && !selectedPageId) {
@@ -59,6 +61,12 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
     if (!selectedPageId) return;
     const key = `postie_draft_page_${selectedPageId}`;
     const stored = localStorage.getItem(key);
+    
+    // Always clear the preview card when changing selected page to prevent cross-page publishing errors
+    setGenerationResult(null);
+    setAttachedImage(null);
+    setAttachedFile(null);
+
     if (stored) {
       try {
         const data = JSON.parse(stored);
@@ -68,16 +76,6 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
         setTone(data.tone ?? 'Friendly');
         setPostFormat(data.postFormat ?? 'Post');
         setSelectedCampaignId(data.campaignId ?? '');
-        setGenerationResult(data.generationResult ?? null);
-        
-        // Clean temporary blob URLs on load since local URLs expire on browser refresh
-        const img = data.attachedImage ?? null;
-        if (img && img.startsWith('blob:')) {
-          setAttachedImage(null);
-          setAttachedFile(null);
-        } else {
-          setAttachedImage(img);
-        }
       } catch (err) {
         console.error('Failed to parse draft from localStorage:', err);
       }
@@ -89,15 +87,17 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
       setTone('Friendly');
       setPostFormat('Post');
       setSelectedCampaignId('');
-      setGenerationResult(null);
-      setAttachedImage(null);
-      setAttachedFile(null);
     }
+    
+    // Mark that this page ID's states have been loaded/synchronized
+    loadedPageIdRef.current = selectedPageId;
   }, [selectedPageId]);
 
   // Save draft to localStorage when states change
   useEffect(() => {
-    if (!selectedPageId) return;
+    // Only save if selectedPageId matches the loaded page state (prevents saving old states to the new page ID during transition)
+    if (!selectedPageId || loadedPageIdRef.current !== selectedPageId) return;
+    
     const key = `postie_draft_page_${selectedPageId}`;
     const data = {
       topic,
@@ -107,7 +107,7 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
       postFormat,
       campaignId: selectedCampaignId,
       generationResult,
-      attachedImage
+      attachedImage: attachedImage && !attachedImage.startsWith('blob:') ? attachedImage : null
     };
     localStorage.setItem(key, JSON.stringify(data));
   }, [selectedPageId, topic, hookType, formula, tone, postFormat, selectedCampaignId, generationResult, attachedImage]);
