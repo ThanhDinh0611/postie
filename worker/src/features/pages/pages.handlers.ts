@@ -27,19 +27,41 @@ pagesRouter.post('/pages/oauth', async (c) => {
     // Get pages the user manages
     const pages = await getUserPages(longLived.access_token);
 
-    // Optimize: Batch insert/replace pages in D1
+    // Fetch existing pages for this user to check inserts/updates
+    const existingPages = await c.env.DB
+      .prepare('SELECT id, facebook_page_id FROM pages WHERE user_id = ?')
+      .bind(userId)
+      .all<{ id: string; facebook_page_id: string }>();
+
+    const existingMap = new Map(existingPages.results?.map(r => [r.facebook_page_id, r.id]) ?? []);
+
     const saved: Array<{ id: string; name: string; username?: string; avatarUrl?: string }> = [];
     const statements: D1PreparedStatement[] = [];
     
     for (const page of pages) {
-      const id = crypto.randomUUID();
-      statements.push(c.env.DB
-        .prepare(
-          `INSERT OR REPLACE INTO pages (id, facebook_page_id, name, username, access_token, avatar_url, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`
-        )
-        .bind(id, page.id, page.name, page.username ?? null, page.access_token, page.picture?.data?.url ?? null, userId)
-      );
+      const existingId = existingMap.get(page.id);
+
+      if (existingId) {
+        statements.push(c.env.DB
+          .prepare(
+            `UPDATE pages 
+             SET name = ?, username = ?, access_token = ?, avatar_url = ?
+             WHERE id = ?`
+          )
+          .bind(page.name, page.username ?? null, page.access_token, page.picture?.data?.url ?? null, existingId)
+        );
+        saved.push({ id: existingId, name: page.name, username: page.username, avatarUrl: page.picture?.data?.url });
+      } else {
+        const newId = crypto.randomUUID();
+        statements.push(c.env.DB
+          .prepare(
+            `INSERT INTO pages (id, facebook_page_id, name, username, access_token, avatar_url, user_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`
+          )
+          .bind(newId, page.id, page.name, page.username ?? null, page.access_token, page.picture?.data?.url ?? null, userId)
+        );
+        saved.push({ id: newId, name: page.name, username: page.username, avatarUrl: page.picture?.data?.url });
+      }
       
       // Subscribe the Facebook App to this page's webhooks
       try {
@@ -47,8 +69,6 @@ pagesRouter.post('/pages/oauth', async (c) => {
       } catch (err) {
         console.error(`Failed to subscribe Page ${page.id} on OAuth connection:`, err);
       }
-
-      saved.push({ id, name: page.name, username: page.username, avatarUrl: page.picture?.data?.url });
     }
 
     if (statements.length > 0) {
