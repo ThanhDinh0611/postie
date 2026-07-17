@@ -52,45 +52,45 @@ postsRouter.post('/posts/publish', async (c) => {
     .first<{ id: string; facebook_page_id: string; name: string; username: string | null; access_token: string }>();
   if (!page) return c.json({ error: 'Page not found' }, 404);
 
-  // Securely handle Clipy short-link generation on the backend
-  let shortUrl = '';
-  if (body.publishType === 'link') {
-    if (!c.env.CLIPY_API_KEY) {
-      throw new Error('Lỗi cấu hình hệ thống: CLIPY_API_KEY chưa được khai báo trên Worker.');
-    }
-    const clipyUrl = c.env.CLIPY_API_URL || 'https://clipy-worker.dct98.workers.dev/api';
-    try {
-      const linkRes = await fetch(`${clipyUrl}/links`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${c.env.CLIPY_API_KEY}`
-        },
-        body: JSON.stringify({
-          target_url: body.targetUrl || 'https://google.com',
-          title: body.linkTitle || body.content.slice(0, 60),
-          description: body.linkDescription || 'Shared via Clipy',
-          image_url: body.mediaUrl || ''
-        })
-      });
-      if (linkRes.ok) {
-        const linkData = await linkRes.json() as { short_code: string };
-        const baseRedirectUrl = clipyUrl.replace(/\/api$/, '');
-        shortUrl = `${baseRedirectUrl}/${linkData.short_code}`;
-      } else {
-        const errText = await linkRes.text();
-        throw new Error(`Clipy API Error (${linkRes.status}): ${errText}`);
-      }
-    } catch (e) {
-      throw new Error(`Lỗi kết nối Clipy API: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
-
-  const finalContent = shortUrl ? `${body.content}\n\n👉 Chi tiết xem tại: ${shortUrl}` : body.content;
-  // If link post, Facebook parses target OG metadata; don't attach raw mediaUrl to make a standalone photo post
-  const fbMediaUrl = body.publishType === 'image' ? body.mediaUrl : undefined;
-
   try {
+    // Securely handle Clipy short-link generation on the backend
+    let shortUrl = '';
+    if (body.publishType === 'link') {
+      if (!c.env.CLIPY_API_KEY) {
+        throw new Error('Lỗi cấu hình hệ thống: CLIPY_API_KEY chưa được khai báo trên Worker.');
+      }
+      const clipyUrl = c.env.CLIPY_API_URL || 'https://clipy-worker.dct98.workers.dev/api';
+      try {
+        const linkRes = await fetch(`${clipyUrl}/links`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${c.env.CLIPY_API_KEY}`
+          },
+          body: JSON.stringify({
+            target_url: body.targetUrl || 'https://google.com',
+            title: body.linkTitle || body.content.slice(0, 60),
+            description: body.linkDescription || 'Shared via Clipy',
+            image_url: body.mediaUrl || ''
+          })
+        });
+        if (linkRes.ok) {
+          const linkData = await linkRes.json() as { short_code: string };
+          const baseRedirectUrl = clipyUrl.replace(/\/api$/, '');
+          shortUrl = `${baseRedirectUrl}/${linkData.short_code}`;
+        } else {
+          const errText = await linkRes.text();
+          throw new Error(`Clipy API Error (${linkRes.status}): ${errText}`);
+        }
+      } catch (e) {
+        throw new Error(`Lỗi kết nối Clipy API: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+
+    const finalContent = shortUrl ? `${body.content}\n\n👉 Chi tiết xem tại: ${shortUrl}` : body.content;
+    // If link post, Facebook parses target OG metadata; don't attach raw mediaUrl to make a standalone photo post
+    const fbMediaUrl = body.publishType === 'image' ? body.mediaUrl : undefined;
+
     const fbResult = await publishPost(page.access_token, page.facebook_page_id, finalContent, fbMediaUrl, body.scheduledAt);
     const permalink = buildPermalink(page.username ?? page.facebook_page_id, fbResult.id);
 
