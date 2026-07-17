@@ -31,7 +31,7 @@ export default function PagesManager({ initialPages, onPagesChange }: PagesManag
       try {
         const token = await getToken();
         if (!token) throw new Error('Unauthorized');
-        const redirectUri = window.location.origin + window.location.pathname;
+        const redirectUri = window.location.origin + '/';
         const result = await oauthConnectPages(code, redirectUri, token);
         setPages(result.pages);
         onPagesChange?.(result.pages);
@@ -48,7 +48,7 @@ export default function PagesManager({ initialPages, onPagesChange }: PagesManag
   }, [searchParams, getToken, navigate, onPagesChange]);
 
   const handleConnect = () => {
-    const redirectUri = window.location.origin + window.location.pathname;
+    const redirectUri = window.location.origin + '/';
     const fbAppId = import.meta.env.VITE_FACEBOOK_APP_ID;
     if (!fbAppId) {
       setError('Missing VITE_FACEBOOK_APP_ID in .env');

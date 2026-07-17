@@ -92,6 +92,17 @@ function AppInner() {
     }
   }, [isLoaded, isSignedIn, getToken]);
 
+  const navigate = useNavigate();
+
+  // Redirect OAuth code from / to /pages (self-healing whitelisted redirect flow)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const code = params.get('code');
+    if (code && location.pathname === '/') {
+      navigate(`/pages?${params.toString()}`, { replace: true });
+    }
+  }, [location, navigate]);
+
   useEffect(() => { loadData(); }, [loadData, location.pathname]);
 
   if (!isLoaded || (isSignedIn && isRoleLoading)) {
