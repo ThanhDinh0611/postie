@@ -213,3 +213,167 @@ syncRouter.post('/sync/posts', async (c) => {
     return c.json({ error: err instanceof Error ? err.message : 'Sync failed', partialResults: allResults, totalSynced }, 500);
   }
 });
+
+// GET /api/webhooks/facebook — Facebook Webhook Verification
+syncRouter.get('/webhooks/facebook', async (c) => {
+  const mode = c.req.query('hub.mode');
+  const token = c.req.query('hub.verify_token');
+  const challenge = c.req.query('hub.challenge');
+
+  const verifyToken = c.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || 'postie_verify_token';
+
+  if (mode === 'subscribe' && token === verifyToken) {
+    console.log('Webhook verified successfully!');
+    return new Response(challenge, { status: 200 });
+  }
+
+  return new Response('Verification failed', { status: 403 });
+});
+
+// POST /api/webhooks/facebook — Facebook Webhook Event Handler
+syncRouter.post('/webhooks/facebook', async (c) => {
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.text('Invalid JSON', 400);
+  }
+
+  // Verify it's a page event
+  if (body.object !== 'page') {
+    return c.text('Not a page event', 200); // Always return 200 to FB to prevent retries
+  }
+
+  const entries = body.entry || [];
+  const statements: D1PreparedStatement[] = [];
+
+  for (const entry of entries) {
+    const facebookPageId = entry.id;
+    
+    // Retrieve page and user_id mapped to this Facebook Page ID
+    const page = await c.env.DB
+      .prepare('SELECT id, user_id FROM pages WHERE facebook_page_id = ?')
+      .bind(facebookPageId)
+      .first<{ id: string; user_id: string }>();
+
+    if (!page) {
+      continue; // Page not registered in our system
+    }
+
+    const changes = entry.changes || [];
+    for (const change of changes) {
+      if (change.field !== 'feed') continue;
+
+      const val = change.value;
+      if (!val) continue;
+
+      const item = val.item; // 'post', 'comment', 'status', 'photo', etc.
+      const verb = val.verb; // 'add', 'edited', 'remove', 'hide', etc.
+
+      if (item === 'post' || item === 'status' || item === 'photo' || item === 'video') {
+        const facebookPostId = val.post_id || val.id;
+        if (!facebookPostId) continue;
+
+        if (verb === 'add') {
+          // Check if post already exists
+          const existing = await c.env.DB
+            .prepare('SELECT id FROM posts WHERE facebook_post_id = ?')
+            .bind(facebookPostId)
+            .first();
+
+          if (!existing) {
+            const postId = crypto.randomUUID();
+            const message = val.message || '';
+            const createdTime = val.created_time || Math.floor(Date.now() / 1000);
+            
+            // Build permalink if possible or query Facebook later. Let's make a standard format
+            const permalink = `https://www.facebook.com/${facebookPageId}/posts/${facebookPostId.split('_')[1] || facebookPostId}`;
+
+            statements.push(c.env.DB.prepare(`
+              INSERT INTO posts(id, page_id, facebook_post_id, permalink, message, post_format, status, created_at, published_at, user_id, last_synced_at)
+              VALUES(?, ?, ?, ?, ?, 'Post', 'Published', ?, ?, ?, unixepoch())
+            `).bind(postId, page.id, facebookPostId, permalink, message, createdTime, createdTime, page.user_id));
+          }
+        } else if (verb === 'edited') {
+          const message = val.message || '';
+          statements.push(c.env.DB.prepare(`
+            UPDATE posts SET message = ?, last_synced_at = unixepoch() WHERE facebook_post_id = ?
+          `).bind(message, facebookPostId));
+        } else if (verb === 'remove') {
+          statements.push(c.env.DB.prepare(`
+            UPDATE posts SET status = 'Deleted', last_synced_at = unixepoch() WHERE facebook_post_id = ?
+          `).bind(facebookPostId));
+        }
+      } else if (item === 'comment') {
+        const facebookCommentId = val.comment_id || val.id;
+        const facebookPostId = val.post_id;
+        if (!facebookCommentId || !facebookPostId) continue;
+
+        if (verb === 'add') {
+          // Find local post ID
+          const post = await c.env.DB
+            .prepare('SELECT id FROM posts WHERE facebook_post_id = ?')
+            .bind(facebookPostId)
+            .first<{ id: string }>();
+
+          if (post) {
+            const existing = await c.env.DB
+              .prepare('SELECT id FROM post_comments WHERE facebook_comment_id = ?')
+              .bind(facebookCommentId)
+              .first();
+
+            if (!existing) {
+              const commentId = crypto.randomUUID();
+              const message = val.message || '';
+              const fromName = val.sender_name || null;
+              const fromId = val.sender_id || null;
+              const createdTime = val.created_time || Math.floor(Date.now() / 1000);
+              const parentId = val.parent_id || null;
+
+              statements.push(c.env.DB.prepare(`
+                INSERT INTO post_comments(id, facebook_comment_id, post_id, from_name, from_id, message, created_time, parent_id, fetched_at)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+              `).bind(commentId, facebookCommentId, post.id, fromName, fromId, message, createdTime, parentId));
+
+              // Increment comment count
+              statements.push(c.env.DB.prepare(`
+                UPDATE posts SET comments_count = comments_count + 1 WHERE id = ?
+              `).bind(post.id));
+            }
+          }
+        } else if (verb === 'edited') {
+          const message = val.message || '';
+          statements.push(c.env.DB.prepare(`
+            UPDATE post_comments SET message = ? WHERE facebook_comment_id = ?
+          `).bind(message, facebookCommentId));
+        } else if (verb === 'remove') {
+          // Find local post ID first to update comments count
+          const comment = await c.env.DB
+            .prepare('SELECT post_id FROM post_comments WHERE facebook_comment_id = ?')
+            .bind(facebookCommentId)
+            .first<{ post_id: string }>();
+
+          if (comment) {
+            statements.push(c.env.DB.prepare(`
+              DELETE FROM post_comments WHERE facebook_comment_id = ?
+            `).bind(facebookCommentId));
+
+            statements.push(c.env.DB.prepare(`
+              UPDATE posts SET comments_count = MAX(0, comments_count - 1) WHERE id = ?
+            `).bind(comment.post_id));
+          }
+        }
+      }
+    }
+  }
+
+  if (statements.length > 0) {
+    try {
+      await c.env.DB.batch(statements);
+    } catch (err) {
+      console.error('Failed to apply webhook changes batch:', err);
+    }
+  }
+
+  return c.text('OK', 200);
+});

@@ -24,6 +24,7 @@ declare global {
     BANK_ACCOUNT_NAME?: string;
     CLIPY_API_KEY?: string;
     CLIPY_API_URL?: string;
+    FACEBOOK_WEBHOOK_VERIFY_TOKEN?: string;
   }
 }
 
@@ -72,6 +73,7 @@ app.post('/api/auth/sync', async (c) => {
 // ─── Admin Authorization Middleware ──────────────────────────────────────────
 app.use('/api/*', async (c, next) => {
   if (c.req.method === 'OPTIONS') return next();
+  if (c.req.path === '/api/webhooks/facebook') return next();
   const isAdmin = await isAdminRequest(c.req.raw, c.env);
   if (!isAdmin) {
     return c.json({ error: 'Forbidden: Admin access required' }, 403);
