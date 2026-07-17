@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { compressImage } from '../utils/image.ts';
 import type { CampaignData } from '../api.ts';
 
 export const HOOK_OPTIONS = [
@@ -59,6 +57,7 @@ interface PostGeneratorProps {
   setAttachedFile: (file: File | null) => void;
   attachedImage: string | null;
   setAttachedImage: (url: string | null) => void;
+  onImageSelect: (file: File) => void;
 }
 
 export default function PostGenerator({
@@ -84,10 +83,9 @@ export default function PostGenerator({
   attachedFile,
   setAttachedFile,
   attachedImage,
-  setAttachedImage
+  setAttachedImage,
+  onImageSelect
 }: PostGeneratorProps) {
-  const [isCompressing, setIsCompressing] = useState(false);
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!topic.trim()) return;
@@ -101,20 +99,10 @@ export default function PostGenerator({
     });
   };
 
-  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsCompressing(true);
-    try {
-      const compressedFile = await compressImage(file);
-      setAttachedFile(compressedFile);
-      const localUrl = URL.createObjectURL(compressedFile);
-      setAttachedImage(localUrl);
-    } catch (err) {
-      alert('⚠️ Lỗi nén ảnh: ' + (err instanceof Error ? err.message : String(err)));
-    } finally {
-      setIsCompressing(false);
+    if (file) {
+      onImageSelect(file);
     }
   };
 
@@ -253,7 +241,7 @@ export default function PostGenerator({
           </select>
         </div>
 
-        {/* Image Attachment (Moved from Preview card) */}
+        {/* Image Attachment */}
         <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1.25rem', marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           <div>
             <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.4rem' }}>
@@ -265,8 +253,8 @@ export default function PostGenerator({
                 accept="image/*"
                 id="image-attachment-generator"
                 style={{ display: 'none' }}
-                onChange={handleImageSelect}
-                disabled={isCompressing || isGenerating}
+                onChange={handleFileChange}
+                disabled={isGenerating}
               />
               <label
                 htmlFor="image-attachment-generator"
@@ -274,11 +262,11 @@ export default function PostGenerator({
                 style={{
                   cursor: 'pointer', background: 'var(--bg-secondary)',
                   color: 'var(--text-secondary)', display: 'inline-flex',
-                  alignItems: 'center', gap: '0.35rem', pointerEvents: isCompressing || isGenerating ? 'none' : 'auto',
-                  opacity: isCompressing || isGenerating ? 0.6 : 1
+                  alignItems: 'center', gap: '0.35rem', pointerEvents: isGenerating ? 'none' : 'auto',
+                  opacity: isGenerating ? 0.6 : 1
                 }}
               >
-                {isCompressing ? '⏳ Đang xử lý ảnh...' : '📁 Chọn ảnh từ thiết bị'}
+                📁 Chọn ảnh từ thiết bị
               </label>
               {attachedFile && (
                 <span style={{ fontSize: '0.75rem', color: 'var(--success)' }}>✓ Đã đính kèm ảnh</span>
@@ -311,7 +299,7 @@ export default function PostGenerator({
           type="submit"
           className="btn btn-primary"
           style={{ width: '100%', justifyContent: 'center', marginTop: '1.25rem', padding: '0.75rem' }}
-          disabled={isGenerating || isCompressing || !topic.trim()}
+          disabled={isGenerating || !topic.trim()}
         >
           {isGenerating ? '⏳ Đang tạo nội dung AI...' : 'Tạo bài viết với AI 🤖'}
         </button>

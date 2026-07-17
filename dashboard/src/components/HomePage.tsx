@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@clerk/clerk-react';
+import { type Area } from 'react-easy-crop';
 import {
   generatePost,
   publishPost,
@@ -9,10 +10,12 @@ import {
   type GenerateResponse,
   type PublishResponse
 } from '../api.ts';
+import { compressImage, getCroppedImg } from '../utils/image.ts';
 import PostGenerator from './PostGenerator.tsx';
 import PostPreview from './PostPreview.tsx';
 import LinkResultCard from './LinkResultCard.tsx';
 import PublishModal from './PublishModal.tsx';
+import ImageCropperModal from './ImageCropperModal.tsx';
 
 interface HomePageProps {
   pages: PageData[];
@@ -43,6 +46,14 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
   const [linkTitle, setLinkTitle] = useState('');
   const [linkDescription, setLinkDescription] = useState('');
 
+  // Image Cropping States
+  const [cropperSrc, setCropperSrc] = useState('');
+  const [cropperFile, setCropperFile] = useState<File | null>(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [aspectRatio, setAspectRatio] = useState<number | undefined>(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+
   // Volatile Action & Progress States
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -60,6 +71,11 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
       else setSelectedPageId(pages[0]!.id);
     }
   }, [pages, selectedPageId]);
+
+  // Adjust aspect ratio automatically when publication format swaps
+  useEffect(() => {
+    setAspectRatio(publishType === 'link' ? 1.91 : 1);
+  }, [publishType]);
 
   const handleGenerate = async (data: {
     topic: string;
@@ -172,6 +188,51 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
     setTargetUrl('https://google.com');
   };
 
+  // Image Cropper Handlers
+  const handleImageSelect = (file: File) => {
+    const localUrl = URL.createObjectURL(file);
+    setCropperSrc(localUrl);
+    setCropperFile(file);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setAspectRatio(publishType === 'link' ? 1.91 : 1);
+  };
+
+  const handleCropComplete = (_: Area, croppedAreaPixels: Area) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  };
+
+  const handleCropConfirm = async () => {
+    if (!cropperSrc || !croppedAreaPixels || !cropperFile) return;
+    setIsPublishing(true);
+    setPublishProgress('⏳ Đang cắt ảnh...');
+    try {
+      const croppedBlob = await getCroppedImg(cropperSrc, croppedAreaPixels);
+      const croppedFile = new File([croppedBlob], cropperFile.name, { type: 'image/jpeg' });
+      
+      setPublishProgress('⏳ Đang nén và tối ưu hóa ảnh...');
+      const compressedFile = await compressImage(croppedFile);
+      
+      setAttachedFile(compressedFile);
+      setAttachedImage(URL.createObjectURL(compressedFile));
+      
+      setCropperSrc('');
+      setCropperFile(null);
+      setCroppedAreaPixels(null);
+    } catch (err) {
+      alert('⚠️ Lỗi cắt ảnh: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsPublishing(false);
+      setPublishProgress('');
+    }
+  };
+
+  const handleCropCancel = () => {
+    setCropperSrc('');
+    setCropperFile(null);
+    setCroppedAreaPixels(null);
+  };
+
   return (
     <div className="container">
       <div style={{ height: 24 }} />
@@ -225,6 +286,7 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
             setAttachedFile={setAttachedFile}
             attachedImage={attachedImage}
             setAttachedImage={setAttachedImage}
+            onImageSelect={handleImageSelect}
           />
           {generationResult ? (
             <PostPreview
@@ -249,6 +311,23 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
             </div>
           )}
         </div>
+      )}
+
+      {/* Image Cropper Modal */}
+      {cropperSrc && (
+        <ImageCropperModal
+          cropperSrc={cropperSrc}
+          crop={crop}
+          zoom={zoom}
+          aspectRatio={aspectRatio}
+          setAspectRatio={setAspectRatio}
+          allowRatioSelection={publishType === 'image'}
+          onCropChange={setCrop}
+          onZoomChange={setZoom}
+          onCropComplete={handleCropComplete}
+          onConfirm={handleCropConfirm}
+          onCancel={handleCropCancel}
+        />
       )}
     </div>
   );
