@@ -179,24 +179,20 @@ export class SyncService {
     const facebookPostId = this.getNormalizedPostId(val, item, facebookPageId);
 
     switch (item) {
-      case 'post':
-      case 'status':
-      case 'photo':
-      case 'video':
-        if (facebookPostId) {
-          await this.handleWebhookPostItem(db, facebookPageId, page.id, page.user_id, facebookPostId, val, verb, statements);
-        }
-        break;
       case 'comment':
         if (facebookPostId) {
           await this.handleWebhookCommentItem(db, facebookPostId, val, verb, statements);
         }
         break;
+      case 'post':
+      case 'status':
+      case 'photo':
+      case 'video':
       case 'reaction':
       case 'like':
       case 'share':
-        // NO-OP: Ignore high-frequency events to prevent D1 write locks.
-        // These metrics are synced on-demand/periodically from the Dashboard.
+        // NO-OP: Ignore high-frequency / non-conversation events to prevent D1 write locks.
+        // These updates are synced on-demand/periodically from the Dashboard.
         break;
     }
 
@@ -219,60 +215,6 @@ export class SyncService {
       }
     }
     return null;
-  }
-
-  private static async handleWebhookPostItem(
-    db: D1Database,
-    facebookPageId: string,
-    pageId: string,
-    userId: string,
-    facebookPostId: string,
-    val: any,
-    verb: string,
-    statements: D1PreparedStatement[]
-  ): Promise<void> {
-    if (verb === 'add') {
-      const existing = await PostRepository.findPostByFacebookId(db, facebookPostId);
-      if (!existing) {
-        const postId = crypto.randomUUID();
-        const message = val.message || '';
-        
-        let createdTime = Math.floor(Date.now() / 1000);
-        if (val.created_time) {
-          if (typeof val.created_time === 'number') {
-            createdTime = val.created_time;
-          } else if (!isNaN(Number(val.created_time))) {
-            createdTime = Number(val.created_time);
-          } else {
-            const parsedDate = new Date(val.created_time);
-            if (!isNaN(parsedDate.getTime())) {
-              createdTime = Math.floor(parsedDate.getTime() / 1000);
-            }
-          }
-        }
-
-        const postShortId = facebookPostId.split('_')[1] || facebookPostId;
-        const permalink = `https://www.facebook.com/${facebookPageId}/posts/${postShortId}`;
-
-        statements.push(PostRepository.getInsertPostStatement(db, {
-          id: postId,
-          page_id: pageId,
-          facebook_post_id: facebookPostId,
-          permalink,
-          message,
-          post_format: 'Post',
-          status: 'Published',
-          created_at: createdTime,
-          published_at: createdTime,
-          user_id: userId
-        }));
-      }
-    } else if (verb === 'edited') {
-      const message = val.message || '';
-      statements.push(PostRepository.getUpdatePostMessageStatement(db, facebookPostId, message));
-    } else if (verb === 'remove') {
-      statements.push(PostRepository.getMarkPostDeletedStatement(db, facebookPostId));
-    }
   }
 
   private static async handleWebhookCommentItem(
