@@ -13,6 +13,8 @@ interface HistoryFiltersProps {
   campaigns: CampaignData[];
   loading: boolean;
   onRefresh: () => void;
+  onSync: () => void;
+  syncing: boolean;
 }
 
 export default function HistoryFilters({
@@ -27,7 +29,9 @@ export default function HistoryFilters({
   pages,
   campaigns,
   loading,
-  onRefresh
+  onRefresh,
+  onSync,
+  syncing
 }: HistoryFiltersProps) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
@@ -92,8 +96,16 @@ export default function HistoryFilters({
           <option value="shares">Chia sẻ nhiều nhất</option>
           <option value="views">Lượt xem nhiều nhất</option>
         </select>
-        <button className="btn btn-sm" onClick={onRefresh} disabled={loading}>
+        <button className="btn btn-sm" onClick={onRefresh} disabled={loading || syncing}>
           {loading ? '...' : 'Refresh'}
+        </button>
+        <button
+          className="btn btn-sm btn-primary"
+          onClick={onSync}
+          disabled={loading || syncing || pageFilter === 'all'}
+          title={pageFilter === 'all' ? 'Vui lòng chọn một trang cụ thể để đồng bộ' : 'Đồng bộ trang này từ Facebook'}
+        >
+          {syncing ? 'Đồng bộ...' : '🔄 Đồng bộ Trang'}
         </button>
       </div>
     </div>

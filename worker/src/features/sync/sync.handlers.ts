@@ -92,6 +92,14 @@ syncRouter.post('/sync/posts', async (c) => {
   const uid = await getUserIdFromRequest(c.req.raw, c.env);
   if (!uid) return c.json({ error: 'Unauthorized' }, 401);
 
+  let targetPageId: string | undefined;
+  try {
+    const body = await c.req.json();
+    targetPageId = body?.pageId;
+  } catch {
+    // Body is empty or not JSON, ignore
+  }
+
   const startTime = Date.now();
   let totalFetched = 0;
   let totalSynced = 0;
@@ -101,8 +109,13 @@ syncRouter.post('/sync/posts', async (c) => {
   const statements: D1PreparedStatement[] = [];
 
   try {
-    const pages = await PageRepository.getPagesByUser(c.env.DB, uid);
+    let pages = await PageRepository.getPagesByUser(c.env.DB, uid);
     if (!pages.length) return c.json({ error: 'No Facebook pages connected.' }, 400);
+
+    if (targetPageId && targetPageId !== 'all') {
+      pages = pages.filter(p => p.id === targetPageId);
+      if (!pages.length) return c.json({ error: 'Selected page not found.' }, 404);
+    }
 
     for (const page of pages) {
       if (totalFetched >= MAX_POSTS || subreq >= SUBREQ_LIMIT) break;

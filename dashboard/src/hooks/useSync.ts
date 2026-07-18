@@ -19,10 +19,10 @@ export function useSync() {
   });
 
   const syncAllPostsMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (pageId?: string) => {
       const token = await getToken();
       if (!token) throw new Error('Not authenticated');
-      return syncAllPosts(token);
+      return syncAllPosts(token, pageId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sync-status'] });

@@ -323,10 +323,15 @@ export async function syncAuthUser(token: string): Promise<{ success: boolean; r
 
 // ─── Sync & Engagement API ──────────────────────────────────────────────────
 
-export async function syncAllPosts(token: string): Promise<SyncResponse> {
+export async function syncAllPosts(token: string, pageId?: string): Promise<SyncResponse> {
+  const body = pageId ? JSON.stringify({ pageId }) : undefined;
   return fetchJson<SyncResponse>(`${API_BASE}/api/sync/posts`, {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders(token)
+    },
+    body
   });
 }
 

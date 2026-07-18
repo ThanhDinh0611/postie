@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { usePosts } from '../hooks/usePosts.ts';
 import { usePages } from '../hooks/usePages.ts';
 import { useCampaigns } from '../hooks/useCampaigns.ts';
+import { useSync } from '../hooks/useSync.ts';
 import HistoryFilters from './posts/HistoryFilters.tsx';
 import PostCard from './posts/PostCard.tsx';
 
@@ -15,6 +16,7 @@ export default function PostHistory() {
   // React Query calls
   const { pagesQuery } = usePages();
   const { campaignsQuery } = useCampaigns();
+  const { syncAllPostsMutation } = useSync();
 
   const pages = pagesQuery.data ?? [];
   const campaigns = campaignsQuery.data ?? [];
@@ -39,9 +41,19 @@ export default function PostHistory() {
 
   const posts = postsQuery.data ?? [];
   const loading = postsQuery.isFetching;
+  const syncing = syncAllPostsMutation.isPending;
 
   const handleRefresh = () => {
     postsQuery.refetch();
+  };
+
+  const handleSync = async () => {
+    if (pageFilter === 'all') return;
+    try {
+      await syncAllPostsMutation.mutateAsync(pageFilter);
+    } catch (err) {
+      console.error('Failed to sync page:', err);
+    }
   };
 
   return (
@@ -59,6 +71,8 @@ export default function PostHistory() {
         campaigns={campaigns}
         loading={loading}
         onRefresh={handleRefresh}
+        onSync={handleSync}
+        syncing={syncing}
       />
 
       {loading && posts.length === 0 ? (

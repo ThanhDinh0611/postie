@@ -71,7 +71,7 @@ export default function SyncDashboard() {
     setProgress(10);
     try {
       setProgress(40);
-      const result = await syncAllPostsMutation.mutateAsync();
+      const result = await syncAllPostsMutation.mutateAsync(selectedPageId);
       setProgress(100);
       setSyncResult(result);
     } catch (err) {
