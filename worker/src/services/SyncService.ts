@@ -182,8 +182,8 @@ export class SyncService {
     const val = changeValue;
     if (!val) return statements;
 
-    const item = val.item; // 'post', 'comment', 'status', etc.
-    const verb = val.verb; // 'add', 'edited', 'remove', etc.
+    const item = val.item; // 'post', 'comment', 'status', 'photo', 'video', 'reaction', 'like', 'share'
+    const verb = val.verb; // 'add', 'edited', 'remove'
 
     // Get the page and user mapped to this page id
     const page = await db
@@ -196,13 +196,29 @@ export class SyncService {
       return statements;
     }
 
-    if (item === 'post' || item === 'status' || item === 'photo' || item === 'video') {
-      let facebookPostId = val.post_id || val.id;
-      if (!facebookPostId) return statements;
-
-      if (!facebookPostId.includes('_')) {
-        facebookPostId = `${facebookPageId}_${facebookPostId}`;
+    // Resolve normalized post ID
+    const getNormalizedPostId = (): string | null => {
+      let id = val.post_id;
+      if (!id && item !== 'comment') {
+        id = val.id;
       }
+      if (id) {
+        return id.includes('_') ? id : `${facebookPageId}_${id}`;
+      }
+      if (item === 'comment') {
+        const commentId = val.comment_id || val.id;
+        const parts = (commentId || '').split('_');
+        if (parts.length >= 2) {
+          return `${parts[0]}_${parts[1]}`;
+        }
+      }
+      return null;
+    };
+
+    const facebookPostId = getNormalizedPostId();
+
+    if (item === 'post' || item === 'status' || item === 'photo' || item === 'video') {
+      if (!facebookPostId) return statements;
 
       if (verb === 'add') {
         const existing = await PostRepository.findPostByFacebookId(db, facebookPostId);
@@ -240,17 +256,6 @@ export class SyncService {
       }
     } else if (item === 'comment') {
       const facebookCommentId = val.comment_id || val.id;
-      let facebookPostId = val.post_id;
-      
-      if (facebookPostId && !facebookPostId.includes('_')) {
-        facebookPostId = `${facebookPageId}_${facebookPostId}`;
-      } else if (!facebookPostId && facebookCommentId) {
-        const parts = facebookCommentId.split('_');
-        if (parts.length >= 2) {
-          facebookPostId = `${parts[0]}_${parts[1]}`;
-        }
-      }
-
       if (!facebookCommentId || !facebookPostId) return statements;
 
       if (verb === 'add') {
@@ -300,6 +305,38 @@ export class SyncService {
         const post = await PostRepository.findPostByFacebookId(db, facebookPostId);
         if (post) {
           statements.push(db.prepare('UPDATE posts SET comments_count = MAX(0, comments_count - 1) WHERE id = ?').bind(post.id));
+        }
+      }
+    } else if (item === 'reaction' || item === 'like') {
+      const facebookCommentId = val.comment_id;
+      const increment = verb === 'add' ? 1 : (verb === 'remove' ? -1 : 0);
+
+      if (increment !== 0) {
+        if (facebookCommentId) {
+          statements.push(
+            db.prepare('UPDATE post_comments SET like_count = MAX(0, like_count + ?) WHERE facebook_comment_id = ?')
+              .bind(increment, facebookCommentId)
+          );
+        } else if (facebookPostId) {
+          const post = await PostRepository.findPostByFacebookId(db, facebookPostId);
+          if (post) {
+            statements.push(
+              db.prepare('UPDATE posts SET likes = MAX(0, likes + ?), last_synced_at = unixepoch() WHERE id = ?')
+                .bind(increment, post.id)
+            );
+          }
+        }
+      }
+    } else if (item === 'share') {
+      const increment = verb === 'add' ? 1 : (verb === 'remove' ? -1 : 0);
+
+      if (increment !== 0 && facebookPostId) {
+        const post = await PostRepository.findPostByFacebookId(db, facebookPostId);
+        if (post) {
+          statements.push(
+            db.prepare('UPDATE posts SET shares = MAX(0, shares + ?), last_synced_at = unixepoch() WHERE id = ?')
+              .bind(increment, post.id)
+          );
         }
       }
     }
