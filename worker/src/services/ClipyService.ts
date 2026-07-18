@@ -9,7 +9,7 @@ export class ClipyService {
     if (!env.CLIPY_API_KEY) {
       throw new Error('Lỗi cấu hình hệ thống: CLIPY_API_KEY chưa được khai báo trên Worker.');
     }
-    const clipyUrl = env.CLIPY_API_URL || 'https://clipy-worker.dct98.workers.dev/api';
+    const clipyUrl = env.CLIPY_API_URL || 'https://clipy.blog/api';
     
     try {
       const linkRes = await fetch(`${clipyUrl}/links`, {
