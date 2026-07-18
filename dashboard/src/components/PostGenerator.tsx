@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { CampaignData } from '../api.ts';
 
 export const HOOK_OPTIONS = [
@@ -31,61 +32,42 @@ interface PostGeneratorProps {
     tone: string;
     postFormat: 'Post' | 'Reel' | 'Video';
     campaignId?: string;
+    publishType: 'image' | 'link';
+    targetUrl: string;
   }) => void;
   isGenerating: boolean;
 
-  // Persisted Draft Props
-  topic: string;
-  setTopic: (val: string) => void;
-  hookType: string;
-  setHookType: (val: string) => void;
-  formula: string;
-  setFormula: (val: string) => void;
-  tone: string;
-  setTone: (val: string) => void;
-  postFormat: 'Post' | 'Reel' | 'Video';
-  setPostFormat: (val: 'Post' | 'Reel' | 'Video') => void;
-  campaignId: string;
-  setCampaignId: (val: string) => void;
-
-  // Publish Format & File Props
-  publishType: 'image' | 'link';
-  setPublishType: (val: 'image' | 'link') => void;
-  targetUrl: string;
-  setTargetUrl: (val: string) => void;
+  // Image assets managed by cropper hook
   attachedFile: File | null;
-  setAttachedFile: (file: File | null) => void;
   attachedImage: string | null;
-  setAttachedImage: (url: string | null) => void;
   onImageSelect: (file: File) => void;
+  onImageRemove: () => void;
+
+  // Publish type state (needed by parent for aspect ratio updates)
+  publishType: 'image' | 'link';
+  setPublishType: (type: 'image' | 'link') => void;
 }
 
 export default function PostGenerator({
   campaigns = [],
   onGenerate,
   isGenerating,
-  topic,
-  setTopic,
-  hookType,
-  setHookType,
-  formula,
-  setFormula,
-  tone,
-  setTone,
-  postFormat,
-  setPostFormat,
-  campaignId,
-  setCampaignId,
-  publishType,
-  setPublishType,
-  targetUrl,
-  setTargetUrl,
   attachedFile,
-  setAttachedFile,
   attachedImage,
-  setAttachedImage,
-  onImageSelect
+  onImageSelect,
+  onImageRemove,
+  publishType,
+  setPublishType
 }: PostGeneratorProps) {
+  // Local form state
+  const [topic, setTopic] = useState('');
+  const [hookType, setHookType] = useState('1. Sự thật thú vị (Interesting fact)');
+  const [formula, setFormula] = useState('PAS (Problem-Agitation-Solution)');
+  const [tone, setTone] = useState('Friendly');
+  const [postFormat, setPostFormat] = useState<'Post' | 'Reel' | 'Video'>('Post');
+  const [campaignId, setCampaignId] = useState('');
+  const [targetUrl, setTargetUrl] = useState('https://google.com');
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!topic.trim()) return;
@@ -95,7 +77,9 @@ export default function PostGenerator({
       formula,
       tone,
       postFormat,
-      campaignId: campaignId || undefined
+      campaignId: campaignId || undefined,
+      publishType,
+      targetUrl
     });
   };
 
@@ -104,11 +88,6 @@ export default function PostGenerator({
     if (file) {
       onImageSelect(file);
     }
-  };
-
-  const handleRemoveImage = () => {
-    setAttachedImage(null);
-    setAttachedFile(null);
   };
 
   return (
@@ -277,7 +256,7 @@ export default function PostGenerator({
                 <img src={attachedImage} alt="Preview" style={{ width: '100%', height: '120px', objectFit: 'cover' }} />
                 <button
                   type="button"
-                  onClick={handleRemoveImage}
+                  onClick={onImageRemove}
                   style={{
                     position: 'absolute', top: '0.25rem', right: '0.25rem',
                     width: 20, height: 20, borderRadius: '50%',

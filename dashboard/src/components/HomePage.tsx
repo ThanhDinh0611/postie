@@ -1,69 +1,52 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '@clerk/clerk-react';
-import { type Area } from 'react-easy-crop';
-import {
-  generatePost,
-  publishPost,
-  uploadImage,
-  type PageData,
-  type CampaignData,
-  type GenerateResponse,
-  type PublishResponse
-} from '../api.ts';
-import { compressImage, getCroppedImg } from '../utils/image.ts';
+import { usePages } from '../hooks/usePages.ts';
+import { useCampaigns } from '../hooks/useCampaigns.ts';
+import { usePosts } from '../hooks/usePosts.ts';
+import { useImageCropper } from '../hooks/useImageCropper.ts';
+import { useToast } from '../hooks/useToast.tsx';
 import PostGenerator from './PostGenerator.tsx';
 import PostPreview from './PostPreview.tsx';
 import LinkResultCard from './LinkResultCard.tsx';
 import PublishModal from './PublishModal.tsx';
 import ImageCropperModal from './ImageCropperModal.tsx';
-import { useToast } from '../hooks/useToast.tsx';
+import type { GenerateResponse, PublishResponse } from '../api.ts';
 
-interface HomePageProps {
-  pages: PageData[];
-  campaigns: CampaignData[];
-  onDataChange?: () => void;
-}
-
-export default function HomePage({ pages, campaigns, onDataChange }: HomePageProps) {
-  const { getToken } = useAuth();
+export default function HomePage() {
   const { addToast } = useToast();
-  
-  // Page selection state
-  const [selectedPageId, setSelectedPageId] = useState('');
-  
-  // Post configurations
-  const [topic, setTopic] = useState('');
-  const [hookType, setHookType] = useState('1. Sự thật thú vị (Interesting fact)');
-  const [formula, setFormula] = useState('PAS (Problem-Agitation-Solution)');
-  const [tone, setTone] = useState('Friendly');
-  const [postFormat, setPostFormat] = useState<'Post' | 'Reel' | 'Video'>('Post');
-  const [selectedCampaignId, setSelectedCampaignId] = useState('');
-  const [generationResult, setGenerationResult] = useState<GenerateResponse | null>(null);
-  const [attachedImage, setAttachedImage] = useState<string | null>(null);
-  const [attachedFile, setAttachedFile] = useState<File | null>(null);
 
-  // Clipy Link Options
+  // Query hooks
+  const { pagesQuery } = usePages();
+  const { campaignsQuery } = useCampaigns();
+
+  const pages = pagesQuery.data ?? [];
+  const campaigns = campaignsQuery.data ?? [];
+
+  // Selected Page State
+  const [selectedPageId, setSelectedPageId] = useState('');
+
+  // Post generation/publish state
+  const [generationResult, setGenerationResult] = useState<GenerateResponse | null>(null);
+  const [publishResult, setPublishResult] = useState<PublishResponse | null>(null);
+
+  // Link Preview States
   const [publishType, setPublishType] = useState<'image' | 'link'>('image');
   const [targetUrl, setTargetUrl] = useState('https://google.com');
   const [linkTitle, setLinkTitle] = useState('');
   const [linkDescription, setLinkDescription] = useState('');
 
-  // Image Cropping States
-  const [cropperSrc, setCropperSrc] = useState('');
-  const [cropperFile, setCropperFile] = useState<File | null>(null);
-  const [crop, setCrop] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
-  const [aspectRatio, setAspectRatio] = useState<number | undefined>(1);
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
-
-  // Volatile Action & Progress States
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isPublishing, setIsPublishing] = useState(false);
-  const [publishProgress, setPublishProgress] = useState('');
+  // Publish Dialog States
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [publishContent, setPublishContent] = useState('');
   const [publishMediaUrl, setPublishMediaUrl] = useState<string | undefined>(undefined);
-  const [publishResult, setPublishResult] = useState<PublishResponse | null>(null);
+  const [publishProgress, setPublishProgress] = useState('');
+
+  // Image Cropper hook
+  const cropper = useImageCropper(1);
+
+  // Adjust aspect ratio based on publication format
+  useEffect(() => {
+    cropper.setAspectRatio(publishType === 'link' ? 1.91 : 1);
+  }, [publishType]);
 
   // Set default active page
   useEffect(() => {
@@ -74,10 +57,8 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
     }
   }, [pages, selectedPageId]);
 
-  // Adjust aspect ratio automatically when publication format swaps
-  useEffect(() => {
-    setAspectRatio(publishType === 'link' ? 1.91 : 1);
-  }, [publishType]);
+  // Post mutation hook
+  const { generatePostMutation, publishPostMutation, uploadImageMutation } = usePosts();
 
   const handleGenerate = async (data: {
     topic: string;
@@ -87,28 +68,22 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
     postFormat: 'Post' | 'Reel' | 'Video';
     campaignId?: string;
   }) => {
-    setIsGenerating(true);
     setPublishResult(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('Unauthorized');
-      
-      const result = await generatePost({
+      const result = await generatePostMutation.mutateAsync({
         topic: data.topic,
         hookType: data.hookType,
         formula: data.formula,
         tone: data.tone,
         postFormat: data.postFormat,
-        publishType, // Pass to AI to conditionally generate link preview details
-      }, token);
-      
+        publishType,
+      });
+
       setGenerationResult(result);
       setLinkTitle(result.linkTitle ?? '');
       setLinkDescription(result.linkDescription ?? '');
     } catch (err) {
       addToast(`Lỗi tạo bài viết: ${err instanceof Error ? err.message : String(err)}`, 'error');
-    } finally {
-      setIsGenerating(false);
     }
   };
 
@@ -118,62 +93,53 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
       return;
     }
     setPublishContent(finalContent);
-    setPublishMediaUrl(attachedImage || undefined);
+    setPublishMediaUrl(cropper.attachedImage || undefined);
     setShowPublishModal(true);
   };
 
   const handleConfirmPublish = async (finalContent: string, scheduledAt?: number) => {
-    setIsPublishing(true);
     setPublishProgress('⏳ Đang chuẩn bị tiến trình đăng...');
     try {
-      const token = await getToken();
-      if (!token) throw new Error('Unauthorized');
-
       let finalMediaUrl = publishMediaUrl;
 
-      // 1. Unify file uploads — backend securely takes care of forwarding the image to Clipy
-      if (attachedFile) {
+      // Unify file upload
+      if (cropper.attachedFile) {
         setPublishProgress('🖼️ Đang tải hình ảnh lên hệ thống...');
-        const uploadRes = await uploadImage(attachedFile, token);
+        const uploadRes = await uploadImageMutation.mutateAsync(cropper.attachedFile);
         finalMediaUrl = uploadRes.image_url;
       }
 
       setPublishProgress('📢 Đang xuất bản bài đăng lên Facebook...');
 
-      // 2. Publish post payload with Clipy config handled securely on the backend worker
-      const result = await publishPost({
+      const result = await publishPostMutation.mutateAsync({
         content: finalContent,
         pageId: selectedPageId,
-        hookType: generationResult?.selectedHook,
-        formula: generationResult?.formulaApplied,
+        hookType: generationResult?.selectedHook ?? undefined,
+        formula: generationResult?.formulaApplied ?? undefined,
         tone: generationResult?.tone ?? undefined,
         scheduledAt,
-        campaignId: selectedCampaignId || undefined,
+        campaignId: undefined, // Campaign is selected inside form config
         generationId: generationResult?.generationId ?? undefined,
         mediaUrl: finalMediaUrl,
         publishType,
         targetUrl: publishType === 'link' ? targetUrl : undefined,
         linkTitle: publishType === 'link' ? linkTitle : undefined,
         linkDescription: publishType === 'link' ? linkDescription : undefined,
-      }, token);
+      });
 
       // Clear draft on successful publish
       setGenerationResult(null);
-      setAttachedImage(null);
-      setAttachedFile(null);
-      setTopic('');
+      cropper.clearAttached();
       setLinkTitle('');
       setLinkDescription('');
       setPublishProgress('');
 
       setPublishResult(result);
       setShowPublishModal(false);
-      onDataChange?.();
       addToast(scheduledAt ? 'Đã lên lịch bài viết thành công! 📅' : 'Đăng bài lên Fanpage thành công! 🚀', 'success');
     } catch (err) {
       addToast(`Lỗi đăng bài: ${err instanceof Error ? err.message : String(err)}`, 'error');
     } finally {
-      setIsPublishing(false);
       setPublishProgress('');
     }
   };
@@ -181,60 +147,15 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
   const handleReset = () => {
     setGenerationResult(null);
     setPublishResult(null);
-    setAttachedImage(null);
-    setAttachedFile(null);
+    cropper.clearAttached();
     setPublishMediaUrl(undefined);
-    setTopic('');
     setLinkTitle('');
     setLinkDescription('');
     setPublishType('image');
     setTargetUrl('https://google.com');
   };
 
-  // Image Cropper Handlers
-  const handleImageSelect = (file: File) => {
-    const localUrl = URL.createObjectURL(file);
-    setCropperSrc(localUrl);
-    setCropperFile(file);
-    setCrop({ x: 0, y: 0 });
-    setZoom(1);
-    setAspectRatio(publishType === 'link' ? 1.91 : 1);
-  };
-
-  const handleCropComplete = (_: Area, croppedAreaPixels: Area) => {
-    setCroppedAreaPixels(croppedAreaPixels);
-  };
-
-  const handleCropConfirm = async () => {
-    if (!cropperSrc || !croppedAreaPixels || !cropperFile) return;
-    setIsPublishing(true);
-    setPublishProgress('⏳ Đang cắt ảnh...');
-    try {
-      const croppedBlob = await getCroppedImg(cropperSrc, croppedAreaPixels);
-      const croppedFile = new File([croppedBlob], cropperFile.name, { type: 'image/jpeg' });
-      
-      setPublishProgress('⏳ Đang nén và tối ưu hóa ảnh...');
-      const compressedFile = await compressImage(croppedFile);
-      
-      setAttachedFile(compressedFile);
-      setAttachedImage(URL.createObjectURL(compressedFile));
-      
-      setCropperSrc('');
-      setCropperFile(null);
-      setCroppedAreaPixels(null);
-    } catch (err) {
-      addToast('Lỗi cắt ảnh: ' + (err instanceof Error ? err.message : String(err)), 'error');
-    } finally {
-      setIsPublishing(false);
-      setPublishProgress('');
-    }
-  };
-
-  const handleCropCancel = () => {
-    setCropperSrc('');
-    setCropperFile(null);
-    setCroppedAreaPixels(null);
-  };
+  const isWorking = generatePostMutation.isPending || publishPostMutation.isPending || cropper.processing || uploadImageMutation.isPending;
 
   return (
     <div className="container">
@@ -249,88 +170,67 @@ export default function HomePage({ pages, campaigns, onDataChange }: HomePagePro
           publishProgress={publishProgress}
           pages={pages}
           selectedPageId={selectedPageId}
-          isPublishing={isPublishing}
+          isPublishing={publishPostMutation.isPending}
           onConfirm={handleConfirmPublish}
-          onCancel={() => { if (!isPublishing) setShowPublishModal(false); }}
+          onCancel={() => setShowPublishModal(false)}
+        />
+      )}
+
+      {cropper.cropperSrc && (
+        <ImageCropperModal
+          cropperSrc={cropper.cropperSrc}
+          crop={cropper.crop}
+          zoom={cropper.zoom}
+          aspectRatio={cropper.aspectRatio}
+          setAspectRatio={cropper.setAspectRatio}
+          allowRatioSelection={publishType === 'image'}
+          onCropChange={cropper.setCrop}
+          onZoomChange={cropper.setZoom}
+          onCropComplete={cropper.handleCropComplete}
+          onConfirm={cropper.handleCropConfirm}
+          onCancel={cropper.handleCropCancel}
         />
       )}
 
       {publishResult ? (
-        <LinkResultCard
-          permalink={publishResult.permalink}
-          facebookPostId={publishResult.facebookPostId}
-          onReset={handleReset}
-        />
+        <div style={{ marginTop: '1.5rem' }}>
+          <LinkResultCard
+            permalink={publishResult.permalink}
+            facebookPostId={publishResult.facebookPostId}
+            onReset={handleReset}
+          />
+        </div>
       ) : (
         <div className="generator-grid">
+          {/* Config column */}
           <PostGenerator
             campaigns={campaigns}
             onGenerate={handleGenerate}
-            isGenerating={isGenerating}
-            topic={topic}
-            setTopic={setTopic}
-            hookType={hookType}
-            setHookType={setHookType}
-            formula={formula}
-            setFormula={setFormula}
-            tone={tone}
-            setTone={setTone}
-            postFormat={postFormat}
-            setPostFormat={setPostFormat}
-            campaignId={selectedCampaignId}
-            setCampaignId={setSelectedCampaignId}
-            
-            // Image upload and Publish Type props
+            isGenerating={isWorking}
+            attachedFile={cropper.attachedFile}
+            attachedImage={cropper.attachedImage}
+            onImageSelect={cropper.handleImageSelect}
+            onImageRemove={cropper.clearAttached}
             publishType={publishType}
             setPublishType={setPublishType}
-            targetUrl={targetUrl}
-            setTargetUrl={setTargetUrl}
-            attachedFile={attachedFile}
-            setAttachedFile={setAttachedFile}
-            attachedImage={attachedImage}
-            setAttachedImage={setAttachedImage}
-            onImageSelect={handleImageSelect}
           />
-          {generationResult ? (
-            <PostPreview
-              content={generationResult.content}
-              isPublishing={isPublishing}
-              onPublish={handleShowPublishModal}
-              pages={pages}
-              selectedPageId={selectedPageId}
-              setSelectedPageId={setSelectedPageId}
-              attachedImage={attachedImage}
-              
-              // Clipy Link Preview props
-              publishType={publishType}
-              linkTitle={linkTitle}
-              setLinkTitle={setLinkTitle}
-              linkDescription={linkDescription}
-              setLinkDescription={setLinkDescription}
-            />
-          ) : (
-            <div className="preview-card" style={{ justifyContent: 'center', alignItems: 'center', minHeight: '300px', color: 'var(--text-muted)' }}>
-              <p>🔮 Cấu hình cài đặt bên trái và nhấn nút "Tạo bài viết" để xem bản nháp AI.</p>
-            </div>
-          )}
-        </div>
-      )}
 
-      {/* Image Cropper Modal */}
-      {cropperSrc && (
-        <ImageCropperModal
-          cropperSrc={cropperSrc}
-          crop={crop}
-          zoom={zoom}
-          aspectRatio={aspectRatio}
-          setAspectRatio={setAspectRatio}
-          allowRatioSelection={publishType === 'image'}
-          onCropChange={setCrop}
-          onZoomChange={setZoom}
-          onCropComplete={handleCropComplete}
-          onConfirm={handleCropConfirm}
-          onCancel={handleCropCancel}
-        />
+          {/* Preview column */}
+          <PostPreview
+            content={generationResult?.content ?? ''}
+            isPublishing={publishPostMutation.isPending}
+            onPublish={handleShowPublishModal}
+            pages={pages}
+            selectedPageId={selectedPageId}
+            setSelectedPageId={setSelectedPageId}
+            attachedImage={cropper.attachedImage}
+            publishType={publishType}
+            linkTitle={linkTitle}
+            setLinkTitle={setLinkTitle}
+            linkDescription={linkDescription}
+            setLinkDescription={setLinkDescription}
+          />
+        </div>
       )}
     </div>
   );

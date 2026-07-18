@@ -1,51 +1,45 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '@clerk/clerk-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { getPages, oauthConnectPages, deletePage, selectActivePage, type PageData } from '../api.ts';
+import { usePages } from '../hooks/usePages.ts';
 
 const FB_GRAPH_VERSION = 'v25.0';
 const FB_OAUTH_SCOPE = 'pages_manage_posts,pages_read_engagement,pages_show_list';
 
-interface PagesManagerProps {
-  initialPages?: PageData[];
-  onPagesChange?: (pages: PageData[]) => void;
-}
-
-export default function PagesManager({ initialPages, onPagesChange }: PagesManagerProps) {
-  const { getToken } = useAuth();
+export default function PagesManager() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [pages, setPages] = useState<PageData[]>(initialPages ?? []);
-  const [loading, setLoading] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
+  const {
+    pagesQuery,
+    connectPagesMutation,
+    deletePageMutation,
+    selectPageMutation
+  } = usePages();
+
+  const pages = pagesQuery.data ?? [];
+  const loading = pagesQuery.isFetching;
+
+  // Handle OAuth Redirect Callback
   useEffect(() => {
     const code = searchParams.get('code');
     if (!code) return;
 
     const handleOAuthCallback = async () => {
-      setConnecting(true);
       setError(null);
       try {
-        const token = await getToken();
-        if (!token) throw new Error('Unauthorized');
         const redirectUri = window.location.origin + window.location.pathname;
-        const result = await oauthConnectPages(code, redirectUri, token);
-        setPages(result.pages);
-        onPagesChange?.(result.pages);
-        setSuccessMsg('Connected ' + result.pages.length + ' page(s) successfully!');
+        const result = await connectPagesMutation.mutateAsync({ code, redirectUri });
+        setSuccessMsg(`Connected ${result.pages.length} page(s) successfully!`);
         navigate(window.location.pathname, { replace: true });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Connection failed');
-      } finally {
-        setConnecting(false);
       }
     };
 
     handleOAuthCallback();
-  }, [searchParams, getToken, navigate, onPagesChange]);
+  }, [searchParams, connectPagesMutation, navigate]);
 
   const handleConnect = () => {
     const redirectUri = window.location.origin + window.location.pathname;
@@ -64,13 +58,9 @@ export default function PagesManager({ initialPages, onPagesChange }: PagesManag
   };
 
   const handleSetActive = async (pageId: string) => {
+    setError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('Unauthorized');
-      await selectActivePage(pageId, token);
-      const updated = pages.map((p: PageData) => ({ ...p, is_active: p.id === pageId ? 1 : 0 }));
-      setPages(updated);
-      onPagesChange?.(updated);
+      await selectPageMutation.mutateAsync(pageId);
       setSuccessMsg('Set as default page');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to set active');
@@ -78,34 +68,18 @@ export default function PagesManager({ initialPages, onPagesChange }: PagesManag
   };
 
   const handleDisconnect = async (pageId: string, pageName: string) => {
-    if (!confirm('Disconnect "' + pageName + '"?')) return;
+    if (!confirm(`Disconnect "${pageName}"?`)) return;
+    setError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('Unauthorized');
-      await deletePage(pageId, token);
-      const updated = pages.filter((p: PageData) => p.id !== pageId);
-      setPages(updated);
-      onPagesChange?.(updated);
-      setSuccessMsg('Disconnected "' + pageName + '"');
+      await deletePageMutation.mutateAsync(pageId);
+      setSuccessMsg(`Disconnected "${pageName}"`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to disconnect');
     }
   };
 
-  const handleRefresh = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const token = await getToken();
-      if (!token) throw new Error('Unauthorized');
-      const fetched = await getPages(token);
-      setPages(fetched);
-      onPagesChange?.(fetched);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load pages');
-    } finally {
-      setLoading(false);
-    }
+  const handleRefresh = () => {
+    pagesQuery.refetch();
   };
 
   useEffect(() => {
@@ -119,6 +93,8 @@ export default function PagesManager({ initialPages, onPagesChange }: PagesManag
     const t = setTimeout(() => setError(null), 6000);
     return () => clearTimeout(t);
   }, [error]);
+
+  const connecting = connectPagesMutation.isPending;
 
   return (
     <div>
@@ -147,7 +123,7 @@ export default function PagesManager({ initialPages, onPagesChange }: PagesManag
         </div>
       </div>
 
-      {pages.length === 0 ? (
+      {pages.length === 0 && !loading ? (
         <div className="placeholder-card" style={{ textAlign: 'center', padding: '3rem 1.5rem' }}>
           <span style={{ fontSize: '3rem', display: 'block', marginBottom: '1rem' }}>Pages</span>
           <h3 style={{ marginBottom: '0.75rem', fontSize: '1.1rem' }}>No Facebook pages connected</h3>

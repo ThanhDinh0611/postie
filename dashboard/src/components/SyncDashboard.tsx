@@ -1,28 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@clerk/clerk-react';
-import {
-  syncAllPosts, getSyncStatus, getPageAnalysis, analyzePage,
-  type SyncResponse, type SyncStatusResponse, type SyncStats, type PageAnalysisData
-} from '../api.ts';
+import { useState, useEffect } from 'react';
+import { useSync } from '../hooks/useSync.ts';
+import { usePages } from '../hooks/usePages.ts';
+import { formatDate, formatNumber } from '../utils/formatters.ts';
+import MetricCard from './analytics/MetricCard.tsx';
+import CSSChart from './analytics/CSSChart.tsx';
+import SyncLog from './analytics/SyncLog.tsx';
+import type { SyncResponse } from '../api.ts';
 
 // ─── Helper functions ────────────────────────────────────────────────────────
-
-function formatNumber(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
-  return n.toLocaleString();
-}
-
-function formatDate(ts: number | null | undefined): string {
-  if (!ts) return 'Never';
-  const d = new Date(ts * 1000);
-  const now = new Date();
-  const diff = now.getTime() - d.getTime();
-  if (diff < 60_000) return 'Vừa xong';
-  if (diff < 3_600_000) return Math.floor(diff / 60_000) + ' phút trước';
-  if (diff < 86_400_000) return Math.floor(diff / 3_600_000) + ' giờ trước';
-  return d.toLocaleDateString('vi-VN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
 
 function renderMarkdown(text: string) {
   if (!text) return null;
@@ -47,220 +32,64 @@ function renderMarkdown(text: string) {
   return <div className="markdown-content" dangerouslySetInnerHTML={{ __html: paragraphs.join('') }} />;
 }
 
-function MiniBar({ value, max, color }: { value: number; max: number; color: string }) {
-  const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
-  return (
-    <div className="mini-bar-track">
-      <div className="mini-bar-fill" style={{ width: pct + '%', background: color }} />
-    </div>
-  );
-}
+export default function SyncDashboard() {
+  const { syncStatusQuery, syncAllPostsMutation } = useSync();
+  const { usePageAnalysis, analyzePageMutation } = usePages();
 
-function MetricCard({ label, value, icon, color, sub }: {
-  label: string; value: string | number; icon: string; color: string; sub?: string;
-}) {
-  return (
-    <div className="metric-card" style={{ borderLeftColor: color }}>
-      <div className="metric-header">
-        <span className="metric-icon">{icon}</span>
-        <span className="metric-label">{label}</span>
-      </div>
-      <div className="metric-value" style={{ color }}>{value}</div>
-      {sub && <div className="metric-sub">{sub}</div>}
-    </div>
-  );
-}
-
-function CSSChart({ title, data, valueSuffix = '%' }: {
-  title: string;
-  data: Array<{ label: string; value: number }>;
-  valueSuffix?: string;
-}) {
-  if (!data || data.length === 0) {
-    return <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Không có dữ liệu biểu đồ.</div>;
-  }
-  const maxVal = Math.max(...data.map(d => d.value), 1);
-  const colors = ['accent', 'success', 'info', 'danger'];
-
-  return (
-    <div className="chart-container" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-      <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>{title}</h4>
-      <div className="chart-bar-container">
-        {data.map((item, idx) => {
-          const colorClass = colors[idx % colors.length] || 'accent';
-          return (
-            <div key={idx} className="chart-bar-row">
-              <div className="chart-bar-label" title={item.label}>{item.label}</div>
-              <div className="chart-bar-track">
-                <div className={`chart-bar-fill ${colorClass}`} style={{ width: `${(item.value / maxVal) * 100}%` }} />
-              </div>
-              <div className="chart-bar-value">{item.value.toFixed(1)}{valueSuffix}</div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function SyncLog({ results, stats }: { results: SyncResponse['results']; stats: SyncStats }) {
-  const [expanded, setExpanded] = useState<string | null>(null);
-
-  if (!results || results.length === 0) {
-    return <div className="placeholder-card"><p>Chưa có bài viết nào được đồng bộ. Click "Đồng bộ ngay" để bắt đầu.</p></div>;
-  }
-
-  return (
-    <div>
-      <div className="sync-mini-stats">
-        <span>{'❤️'} {formatNumber(stats.totalLikes)}</span>
-        <span>{'💬'} {formatNumber(stats.totalComments)}</span>
-        <span>{'🔁'} {formatNumber(stats.totalShares)}</span>
-        <span>{'👁️'} {formatNumber(stats.totalViews)}</span>
-        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-          Trung bình: {stats.avgLikes} ❤️ / {stats.avgComments} 💬 / {stats.avgShares} 🔁
-        </span>
-      </div>
-      <div className="sync-post-list">
-        {results.map((item) => {
-          const isExpanded = expanded === item.postId;
-          const eng = item.engagement;
-          const maxVal = eng ? Math.max(eng.likes, eng.comments, eng.shares, eng.views, 1) : 1;
-          return (
-            <div
-              key={item.postId}
-              className={'sync-post-item' + (isExpanded ? ' expanded' : '')}
-              onClick={() => setExpanded(isExpanded ? null : item.postId)}
-            >
-              <div className="sync-post-header">
-                <div className="sync-post-message">{item.message || '(Không có nội dung)'}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
-                  <span className="sync-page-badge">{item.pageName}</span>
-                  {eng
-                    ? <span className="status-badge status-synced">Đã đồng bộ</span>
-                    : <span className="status-badge status-pending">Chưa có số liệu</span>}
-                </div>
-              </div>
-              {eng && (
-                <div className="sync-post-metrics">
-                  <div className="sync-metric-row">
-                    <span className="sync-metric-label">{'❤️'} {formatNumber(eng.likes)}</span>
-                    <MiniBar value={eng.likes} max={maxVal} color="#ef4444" />
-                  </div>
-                  <div className="sync-metric-row">
-                    <span className="sync-metric-label">{'💬'} {formatNumber(eng.comments)}</span>
-                    <MiniBar value={eng.comments} max={maxVal} color="#3b82f6" />
-                  </div>
-                  <div className="sync-metric-row">
-                    <span className="sync-metric-label">{'🔁'} {formatNumber(eng.shares)}</span>
-                    <MiniBar value={eng.shares} max={maxVal} color="#22c55e" />
-                  </div>
-                  <div className="sync-metric-row">
-                    <span className="sync-metric-label">{'👁️'} {formatNumber(eng.views)}</span>
-                    <MiniBar value={eng.views} max={maxVal} color="#a855f7" />
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ─── Main SyncDashboard Component ──────────────────────────────────────────
-
-interface SyncDashboardProps {
-  onDataChange?: () => void;
-}
-
-export default function SyncDashboard({ onDataChange }: SyncDashboardProps) {
-  const { getToken } = useAuth();
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResponse | null>(null);
-  const [status, setStatus] = useState<SyncStatusResponse | null>(null);
-  const [analysis, setAnalysis] = useState<PageAnalysisData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState(0);
   const [selectedPageId, setSelectedPageId] = useState<string>('');
   const [completedSuggestions, setCompletedSuggestions] = useState<Record<string, boolean>>({});
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadStatusAndAnalysis = useCallback(async () => {
-    try {
-      const token = await getToken();
-      if (!token) return;
-      
-      const statusRes = await getSyncStatus(token);
-      setStatus(statusRes);
+  const status = syncStatusQuery.data;
 
-      // Find active page to load analysis
-      let pageId = selectedPageId;
-      if (!pageId && statusRes.pages && statusRes.pages.length > 0) {
-        // Find active page or default to first
-        const active = statusRes.pages.find(p => p.id); // Or active check
-        pageId = active?.id || statusRes.pages[0]!.id;
-        setSelectedPageId(pageId);
-      }
+  // Sync Analysis query based on selectedPageId
+  const { data: analysis, isLoading: isAnalysisLoading } = usePageAnalysis(selectedPageId);
 
-      if (pageId) {
-        const analysisRes = await getPageAnalysis(pageId, token);
-        setAnalysis(analysisRes);
-        
-        // Load checked suggestions from localStorage
-        const stored = localStorage.getItem(`suggestions_completed_${pageId}`);
-        if (stored) {
-          try { setCompletedSuggestions(JSON.parse(stored)); } catch { /* ignore */ }
-        } else {
-          setCompletedSuggestions({});
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load status/analysis:', err);
-    }
-  }, [getToken, selectedPageId]);
-
+  // Set default page ID on status load
   useEffect(() => {
-    loadStatusAndAnalysis();
-  }, [loadStatusAndAnalysis]);
+    if (status?.pages && status.pages.length > 0 && !selectedPageId) {
+      setSelectedPageId(status.pages[0]!.id);
+    }
+  }, [status, selectedPageId]);
+
+  // Load checked suggestions from local storage
+  useEffect(() => {
+    if (selectedPageId) {
+      const stored = localStorage.getItem(`suggestions_completed_${selectedPageId}`);
+      if (stored) {
+        try { setCompletedSuggestions(JSON.parse(stored)); } catch { /* ignore */ }
+      } else {
+        setCompletedSuggestions({});
+      }
+    }
+  }, [selectedPageId]);
 
   const handleSync = async () => {
-    setIsSyncing(true);
     setError(null);
     setProgress(10);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('Unauthorized');
-      setProgress(30);
-      const result = await syncAllPosts(token);
+      setProgress(40);
+      const result = await syncAllPostsMutation.mutateAsync();
       setProgress(100);
       setSyncResult(result);
-      onDataChange?.();
-      await loadStatusAndAnalysis();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sync failed');
     } finally {
-      setIsSyncing(false);
       setProgress(0);
     }
   };
 
   const handleRunAudit = async () => {
     if (!selectedPageId) return;
-    setIsAnalyzing(true);
     setError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('Unauthorized');
-      const result = await analyzePage(selectedPageId, token);
-      setAnalysis(result);
+      await analyzePageMutation.mutateAsync(selectedPageId);
       localStorage.setItem(`suggestions_completed_${selectedPageId}`, '{}');
       setCompletedSuggestions({});
     } catch (err) {
       setError(err instanceof Error ? err.message : 'AI Page Audit failed');
-    } finally {
-      setIsAnalyzing(false);
     }
   };
 
@@ -274,8 +103,10 @@ export default function SyncDashboard({ onDataChange }: SyncDashboardProps) {
 
   const handlePageChange = (pageId: string) => {
     setSelectedPageId(pageId);
-    setAnalysis(null);
   };
+
+  const isSyncing = syncAllPostsMutation.isPending;
+  const isAnalyzing = analyzePageMutation.isPending;
 
   const eng = status?.engagement;
   const totalEng = (eng?.totalLikes ?? 0) + (eng?.totalComments ?? 0) + (eng?.totalShares ?? 0) + (eng?.totalViews ?? 0);
@@ -346,7 +177,7 @@ export default function SyncDashboard({ onDataChange }: SyncDashboardProps) {
       )}
 
       {/* AI Page Analysis Strategic Section */}
-      {isAnalyzing ? (
+      {isAnalyzing || isAnalysisLoading ? (
         <div className="skeleton-container">
           <div className="skeleton-box">
             <div className="skeleton-bar header"></div>

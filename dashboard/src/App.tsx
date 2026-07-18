@@ -1,11 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { ClerkProvider, SignedIn, SignedOut, useAuth, useUser, SignIn, SignUp, SignOutButton, RedirectToSignIn, AuthenticateWithRedirectCallback } from '@clerk/clerk-react';
 import { dark } from '@clerk/themes';
-import {
-  getPages, getPosts, syncAuthUser, getCampaigns,
-  type PageData, type PostData, type CampaignData
-} from './api.ts';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { syncAuthUser } from './api.ts';
 import NavBar from './components/NavBar.tsx';
 import HomePage from './components/HomePage.tsx';
 import PagesPage from './components/PagesPage.tsx';
@@ -14,6 +12,16 @@ import SyncDashboard from './components/SyncDashboard.tsx';
 import { ToastProvider } from './hooks/useToast.tsx';
 
 const CLERK_PUBLISHABLE_KEY = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string || '').trim();
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      refetchOnWindowFocus: false,
+      retry: 1
+    }
+  }
+});
 
 function AuthPage() {
   return (
@@ -50,51 +58,14 @@ function AdminRequiredPage() {
 // ─── AppInner ────────────────────────────────────────────────────────────────
 
 function AppInner() {
-  const [pages, setPages] = useState<PageData[]>([]);
-  const [posts, setPosts] = useState<PostData[]>([]);
-  const [campaigns, setCampaigns] = useState<CampaignData[]>([]);
   const { isSignedIn, getToken } = useAuth();
   const { isLoaded } = useUser();
   const [isAdmin, setIsAdmin] = useState(false);
   const [isRoleLoading, setIsRoleLoading] = useState(true);
   const location = useLocation();
-  console.debug('Loaded posts:', posts.length);
-
-  const loadData = useCallback(async () => {
-    if (!isLoaded) return;
-    if (!isSignedIn) {
-      setIsRoleLoading(false);
-      return;
-    }
-    setIsRoleLoading(true);
-    const token = await getToken();
-    if (!token) {
-      setIsRoleLoading(false);
-      return;
-    }
-    try {
-      const syncRes = await syncAuthUser(token);
-      const isUserAdmin = syncRes.role === 'admin';
-      setIsAdmin(isUserAdmin);
-
-      if (isUserAdmin) {
-        const [fetchedPages, fetchedPosts, fetchedCampaigns] = await Promise.all([
-          getPages(token), getPosts(token), getCampaigns(token)
-        ]);
-        setPages(fetchedPages);
-        setPosts(fetchedPosts);
-        setCampaigns(fetchedCampaigns);
-      }
-    } catch (err) {
-      console.error('Failed to load data:', err);
-    } finally {
-      setIsRoleLoading(false);
-    }
-  }, [isLoaded, isSignedIn, getToken]);
-
   const navigate = useNavigate();
 
-  // Redirect OAuth code from / to /pages (self-healing whitelisted redirect flow)
+  // Redirect OAuth code from / to /pages
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const code = params.get('code');
@@ -103,7 +74,30 @@ function AppInner() {
     }
   }, [location, navigate]);
 
-  useEffect(() => { loadData(); }, [loadData, location.pathname]);
+  useEffect(() => {
+    async function checkRole() {
+      if (!isLoaded) return;
+      if (!isSignedIn) {
+        setIsRoleLoading(false);
+        return;
+      }
+      setIsRoleLoading(true);
+      const token = await getToken();
+      if (!token) {
+        setIsRoleLoading(false);
+        return;
+      }
+      try {
+        const syncRes = await syncAuthUser(token);
+        setIsAdmin(syncRes.role === 'admin');
+      } catch (err) {
+        console.error('Failed to sync auth user role:', err);
+      } finally {
+        setIsRoleLoading(false);
+      }
+    }
+    checkRole();
+  }, [isLoaded, isSignedIn, getToken, location.pathname]);
 
   if (!isLoaded || (isSignedIn && isRoleLoading)) {
     return (
@@ -137,7 +131,7 @@ function AppInner() {
                   </div>
                 </SignedOut>
                 <SignedIn>
-                  {isAdmin ? <HomePage pages={pages} campaigns={campaigns} onDataChange={loadData} /> : <AdminRequiredPage />}
+                  {isAdmin ? <HomePage /> : <AdminRequiredPage />}
                 </SignedIn>
               </>
             }
@@ -154,7 +148,7 @@ function AppInner() {
                       <h2>📝 Lịch sử đăng bài</h2>
                       <p className="text-muted">Quản lý các bài viết và link đã tạo.</p>
                       <div style={{ marginTop: '1.5rem' }}>
-                        <PostHistory initialPosts={posts} pages={pages} campaigns={campaigns} onRefresh={loadData} />
+                        <PostHistory />
                       </div>
                     </div>
                   ) : <AdminRequiredPage />}
@@ -171,12 +165,7 @@ function AppInner() {
               <>
                 <SignedIn>
                   {isAdmin ? (
-                    <PagesPage
-                      pages={pages}
-                      campaigns={campaigns}
-                      onPagesChange={() => loadData()}
-                      onCampaignsChange={() => loadData()}
-                    />
+                    <PagesPage />
                   ) : <AdminRequiredPage />}
                 </SignedIn>
                 <SignedOut>
@@ -193,7 +182,7 @@ function AppInner() {
                   {isAdmin ? (
                     <div className="container">
                       <div style={{ height: 24 }} />
-                      <SyncDashboard onDataChange={loadData} />
+                      <SyncDashboard />
                     </div>
                   ) : <AdminRequiredPage />}
                 </SignedIn>
@@ -251,9 +240,11 @@ export default function App() {
   }
   return (
     <BrowserRouter>
-      <ToastProvider>
-        <ClerkProviderWithRouter />
-      </ToastProvider>
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <ClerkProviderWithRouter />
+        </ToastProvider>
+      </QueryClientProvider>
     </BrowserRouter>
   );
 }

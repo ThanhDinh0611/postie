@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { useAuth } from '@clerk/clerk-react';
-import { getCampaigns, createCampaign, updateCampaign, deleteCampaign, type CampaignData } from '../api.ts';
+import { useState } from 'react';
+import { useCampaigns } from '../hooks/useCampaigns.ts';
+import type { CampaignData } from '../api.ts';
 
 const PALETTE = [
   { name: 'Xanh dương', value: '#3b82f6' },
@@ -12,15 +12,17 @@ const PALETTE = [
   { name: 'Teal', value: '#06b6d4' }
 ];
 
-interface CampaignsManagerProps {
-  initialCampaigns?: CampaignData[];
-  onCampaignsChange?: (campaigns: CampaignData[]) => void;
-}
+export default function CampaignsManager() {
+  const {
+    campaignsQuery,
+    createCampaignMutation,
+    updateCampaignMutation,
+    deleteCampaignMutation
+  } = useCampaigns();
 
-export default function CampaignsManager({ initialCampaigns, onCampaignsChange }: CampaignsManagerProps) {
-  const { getToken } = useAuth();
-  const [campaigns, setCampaigns] = useState<CampaignData[]>(initialCampaigns ?? []);
-  const [loading, setLoading] = useState(false);
+  const campaigns = campaignsQuery.data ?? [];
+  const loading = campaignsQuery.isFetching;
+
   const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
   
   // Form states
@@ -31,28 +33,6 @@ export default function CampaignsManager({ initialCampaigns, onCampaignsChange }
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const fetchCampaigns = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const token = await getToken();
-      if (!token) return;
-      const data = await getCampaigns(token);
-      setCampaigns(data);
-      onCampaignsChange?.(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch campaigns');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!initialCampaigns) {
-      fetchCampaigns();
-    }
-  }, []);
-
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
@@ -60,15 +40,15 @@ export default function CampaignsManager({ initialCampaigns, onCampaignsChange }
     setSuccess(null);
 
     try {
-      const token = await getToken();
-      if (!token) throw new Error('Unauthorized');
-
       if (editingCampaignId) {
-        await updateCampaign(editingCampaignId, { title, description, color }, token);
+        await updateCampaignMutation.mutateAsync({
+          id: editingCampaignId,
+          data: { title, description, color }
+        });
         setSuccess('Đã cập nhật chiến dịch!');
         setEditingCampaignId(null);
       } else {
-        await createCampaign({ title, description, color }, token);
+        await createCampaignMutation.mutateAsync({ title, description, color });
         setSuccess('Đã tạo chiến dịch mới!');
       }
 
@@ -76,9 +56,6 @@ export default function CampaignsManager({ initialCampaigns, onCampaignsChange }
       setTitle('');
       setDescription('');
       setColor(PALETTE[0]!.value);
-      
-      // Reload
-      fetchCampaigns();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save campaign');
     }
@@ -102,14 +79,15 @@ export default function CampaignsManager({ initialCampaigns, onCampaignsChange }
     if (!confirm(`Xóa chiến dịch "${c.title}"? Các bài viết thuộc chiến dịch này sẽ không bị xóa nhưng sẽ không còn thuộc chiến dịch nào.`)) return;
     setError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('Unauthorized');
-      await deleteCampaign(c.id, token);
+      await deleteCampaignMutation.mutateAsync(c.id);
       setSuccess('Đã xóa chiến dịch!');
-      fetchCampaigns();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete campaign');
     }
+  };
+
+  const handleRefresh = () => {
+    campaignsQuery.refetch();
   };
 
   return (
@@ -190,12 +168,12 @@ export default function CampaignsManager({ initialCampaigns, onCampaignsChange }
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ fontSize: '1.05rem', fontWeight: 600 }}>📋 Danh sách chiến dịch tiếp thị ({campaigns.length})</h3>
-          <button className="btn btn-sm" onClick={fetchCampaigns} disabled={loading}>
+          <button className="btn btn-sm" onClick={handleRefresh} disabled={loading}>
             {loading ? '...' : 'Refresh'}
           </button>
         </div>
 
-        {campaigns.length === 0 ? (
+        {campaigns.length === 0 && !loading ? (
           <div className="placeholder-card" style={{ padding: '2rem 1rem' }}>
             <p>Chưa có chiến dịch nào. Tạo chiến dịch ở bảng bên trái để quản lý bài viết tốt hơn!</p>
           </div>

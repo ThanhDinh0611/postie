@@ -1,21 +1,8 @@
 import { useState } from 'react';
 import PagesManager from './PagesManager.tsx';
 import CampaignsManager from './CampaignsManager.tsx';
-import type { PageData, CampaignData } from '../api.ts';
 
-interface PagesPageProps {
-  pages: PageData[];
-  campaigns: CampaignData[];
-  onPagesChange?: (pages: PageData[]) => void;
-  onCampaignsChange?: (campaigns: CampaignData[]) => void;
-}
-
-export default function PagesPage({
-  pages,
-  campaigns,
-  onPagesChange,
-  onCampaignsChange,
-}: PagesPageProps) {
+export default function PagesPage() {
   const [activeSubTab, setActiveSubTab] = useState<'pages' | 'campaigns'>('pages');
 
   return (
@@ -35,9 +22,9 @@ export default function PagesPage({
       
       <div style={{ marginTop: '1rem' }}>
         {activeSubTab === 'pages' ? (
-          <PagesManager initialPages={pages} onPagesChange={onPagesChange} />
+          <PagesManager />
         ) : (
-          <CampaignsManager initialCampaigns={campaigns} onCampaignsChange={onCampaignsChange} />
+          <CampaignsManager />
         )}
       </div>
     </div>
