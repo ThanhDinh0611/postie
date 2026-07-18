@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { usePages } from '../hooks/usePages.ts';
 
 const FB_GRAPH_VERSION = 'v25.0';
-const FB_OAUTH_SCOPE = 'pages_manage_posts,pages_read_engagement,pages_show_list';
+const FB_OAUTH_SCOPE = 'pages_manage_posts,pages_read_engagement,pages_show_list,read_insights';
 
 export default function PagesManager() {
   const navigate = useNavigate();

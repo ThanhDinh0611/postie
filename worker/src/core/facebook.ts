@@ -132,28 +132,49 @@ export async function getPostEngagement(
   pageAccessToken: string,
   facebookPostId: string,
 ): Promise<FacebookEngagement> {
-  const url = `${GRAPH_API_BASE}/${facebookPostId}?fields=likes.summary(true),comments.summary(true),shares,insights.metric(post_impressions,post_impressions_unique)&access_token=${pageAccessToken}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to fetch post engagement: ${res.status}`);
-  const data = (await res.json()) as {
-    likes?: { summary?: { total_count: number } };
-    comments?: { summary?: { total_count: number } };
-    shares?: { count: number };
-    insights?: { data: Array<{ name: string; values: Array<{ value: number }> }> };
+  const executeQuery = async (withInsights: boolean) => {
+    const fields = `likes.summary(true),comments.summary(true),shares${withInsights ? ',insights.metric(post_impressions,post_impressions_unique)' : ''}`;
+    const url = `${GRAPH_API_BASE}/${facebookPostId}?fields=${fields}&access_token=${pageAccessToken}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Failed to fetch post engagement: ${res.status} - ${errText}`);
+    }
+    return res.json() as Promise<{
+      likes?: { summary?: { total_count: number } };
+      comments?: { summary?: { total_count: number } };
+      shares?: { count: number };
+      insights?: { data: Array<{ name: string; values: Array<{ value: number }> }> };
+    }>;
   };
 
-  let views = 0;
-  if (data.insights?.data) {
-    const impressions = data.insights.data.find((i) => i.name === 'post_impressions');
-    if (impressions?.values?.[0]) views = impressions.values[0].value;
+  try {
+    const data = await executeQuery(true);
+    let views = 0;
+    if (data.insights?.data) {
+      const impressions = data.insights.data.find((i) => i.name === 'post_impressions');
+      if (impressions?.values?.[0]) views = impressions.values[0].value;
+    }
+    return {
+      likes: data.likes?.summary?.total_count ?? 0,
+      comments: data.comments?.summary?.total_count ?? 0,
+      shares: data.shares?.count ?? 0,
+      views,
+    };
+  } catch (err) {
+    console.warn('Failed to fetch post engagement with insights, retrying without insights...', err);
+    try {
+      const data = await executeQuery(false);
+      return {
+        likes: data.likes?.summary?.total_count ?? 0,
+        comments: data.comments?.summary?.total_count ?? 0,
+        shares: data.shares?.count ?? 0,
+        views: 0,
+      };
+    } catch (retryErr) {
+      throw retryErr;
+    }
   }
-
-  return {
-    likes: data.likes?.summary?.total_count ?? 0,
-    comments: data.comments?.summary?.total_count ?? 0,
-    shares: data.shares?.count ?? 0,
-    views,
-  };
 }
 
 /**
@@ -173,27 +194,59 @@ export async function batchGetPostEngagements(
   const batchSize = 50;
   for (let i = 0; i < facebookPostIds.length; i += batchSize) {
     const chunk = facebookPostIds.slice(i, i + batchSize);
-    const batch = chunk.map((postId) => ({
-      method: 'GET' as const,
-      relative_url: `${postId}?fields=likes.summary(true),comments.summary(true),shares,insights.metric(post_impressions)`,
-    }));
+    
+    let data: Array<{ code: number; body: string }> = [];
 
-    const url = `${GRAPH_API_BASE}/?access_token=${pageAccessToken}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ batch }),
-    });
+    const executeQuery = async (withInsights: boolean) => {
+      const batch = chunk.map((postId) => ({
+        method: 'GET' as const,
+        relative_url: `${postId}?fields=likes.summary(true),comments.summary(true),shares${
+          withInsights ? ',insights.metric(post_impressions)' : ''
+        }`,
+      }));
 
-    if (!res.ok) {
-      console.error(`Batch engagement fetch failed: ${res.status}`);
-      continue; // Skip this batch, return partial results
+      const url = `${GRAPH_API_BASE}/?access_token=${pageAccessToken}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batch }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Batch request failed: ${res.status}`);
+      }
+      return res.json() as Promise<Array<{ code: number; body: string }>>;
+    };
+
+    try {
+      data = await executeQuery(true);
+      // Check if any subrequest failed due to insights permission
+      const needsRetry = data.some(item => {
+        if (item.code === 400) {
+          try {
+            const errBody = JSON.parse(item.body);
+            const msg = errBody.error?.message ?? '';
+            return msg.includes('insights') || msg.includes('read_insights');
+          } catch {
+            return false;
+          }
+        }
+        return false;
+      });
+
+      if (needsRetry) {
+        console.warn('Facebook post insights permission missing. Retrying batch without insights...');
+        data = await executeQuery(false);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch batch with insights, retrying without insights...', err);
+      try {
+        data = await executeQuery(false);
+      } catch (retryErr) {
+        console.error('Batch retry failed:', retryErr);
+        continue;
+      }
     }
-
-    const data = (await res.json()) as Array<{
-      code: number;
-      body: string;
-    }>;
 
     for (let j = 0; j < data.length; j++) {
       const item = data[j];
