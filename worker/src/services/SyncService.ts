@@ -13,7 +13,6 @@ export class SyncService {
     try {
       const fbComments = await getPostComments(accessToken, facebookPostId);
       
-      // Batch check existing comments
       const ids: string[] = [];
       for (const comment of fbComments) {
         ids.push(comment.id);
@@ -185,7 +184,6 @@ export class SyncService {
     const item = val.item; // 'post', 'comment', 'status', 'photo', 'video', 'reaction', 'like', 'share'
     const verb = val.verb; // 'add', 'edited', 'remove'
 
-    // Get the page and user mapped to this page id
     const page = await db
       .prepare('SELECT id, user_id FROM pages WHERE facebook_page_id = ?')
       .bind(facebookPageId)
@@ -196,36 +194,122 @@ export class SyncService {
       return statements;
     }
 
-    // Resolve normalized post ID
-    const getNormalizedPostId = (): string | null => {
-      let id = val.post_id;
-      if (!id && item !== 'comment') {
-        id = val.id;
-      }
-      if (id) {
-        return id.includes('_') ? id : `${facebookPageId}_${id}`;
-      }
-      if (item === 'comment') {
-        const commentId = val.comment_id || val.id;
-        const parts = (commentId || '').split('_');
-        if (parts.length >= 2) {
-          return `${parts[0]}_${parts[1]}`;
+    const facebookPostId = this.getNormalizedPostId(val, item, facebookPageId);
+
+    switch (item) {
+      case 'post':
+      case 'status':
+      case 'photo':
+      case 'video':
+        if (facebookPostId) {
+          await this.handleWebhookPostItem(db, facebookPageId, page.id, page.user_id, facebookPostId, val, verb, statements);
         }
+        break;
+      case 'comment':
+        if (facebookPostId) {
+          await this.handleWebhookCommentItem(db, facebookPostId, val, verb, statements);
+        }
+        break;
+      case 'reaction':
+      case 'like':
+        await this.handleWebhookReactionItem(db, facebookPostId, val, verb, statements);
+        break;
+      case 'share':
+        await this.handleWebhookShareItem(db, facebookPostId, verb, statements);
+        break;
+    }
+
+    return statements;
+  }
+
+  private static getNormalizedPostId(val: any, item: string, facebookPageId: string): string | null {
+    let id = val.post_id;
+    if (!id && item !== 'comment') {
+      id = val.id;
+    }
+    if (id) {
+      return id.includes('_') ? id : `${facebookPageId}_${id}`;
+    }
+    if (item === 'comment') {
+      const commentId = val.comment_id || val.id;
+      const parts = (commentId || '').split('_');
+      if (parts.length >= 2) {
+        return `${parts[0]}_${parts[1]}`;
       }
-      return null;
-    };
+    }
+    return null;
+  }
 
-    const facebookPostId = getNormalizedPostId();
+  private static async handleWebhookPostItem(
+    db: D1Database,
+    facebookPageId: string,
+    pageId: string,
+    userId: string,
+    facebookPostId: string,
+    val: any,
+    verb: string,
+    statements: D1PreparedStatement[]
+  ): Promise<void> {
+    if (verb === 'add') {
+      const existing = await PostRepository.findPostByFacebookId(db, facebookPostId);
+      if (!existing) {
+        const postId = crypto.randomUUID();
+        const message = val.message || '';
+        
+        let createdTime = Math.floor(Date.now() / 1000);
+        if (val.created_time) {
+          if (typeof val.created_time === 'number') {
+            createdTime = val.created_time;
+          } else if (!isNaN(Number(val.created_time))) {
+            createdTime = Number(val.created_time);
+          } else {
+            const parsedDate = new Date(val.created_time);
+            if (!isNaN(parsedDate.getTime())) {
+              createdTime = Math.floor(parsedDate.getTime() / 1000);
+            }
+          }
+        }
 
-    if (item === 'post' || item === 'status' || item === 'photo' || item === 'video') {
-      if (!facebookPostId) return statements;
+        const postShortId = facebookPostId.split('_')[1] || facebookPostId;
+        const permalink = `https://www.facebook.com/${facebookPageId}/posts/${postShortId}`;
 
-      if (verb === 'add') {
-        const existing = await PostRepository.findPostByFacebookId(db, facebookPostId);
+        statements.push(db.prepare(`
+          INSERT INTO posts(id, page_id, facebook_post_id, permalink, message, post_format, status, created_at, published_at, user_id, last_synced_at)
+          VALUES(?, ?, ?, ?, ?, 'Post', 'Published', ?, ?, ?, unixepoch())
+        `).bind(postId, pageId, facebookPostId, permalink, message, createdTime, createdTime, userId));
+      }
+    } else if (verb === 'edited') {
+      const message = val.message || '';
+      statements.push(db.prepare('UPDATE posts SET message = ?, last_synced_at = unixepoch() WHERE facebook_post_id = ?').bind(message, facebookPostId));
+    } else if (verb === 'remove') {
+      statements.push(db.prepare("UPDATE posts SET status = 'Deleted', last_synced_at = unixepoch() WHERE facebook_post_id = ?").bind(facebookPostId));
+    }
+  }
+
+  private static async handleWebhookCommentItem(
+    db: D1Database,
+    facebookPostId: string,
+    val: any,
+    verb: string,
+    statements: D1PreparedStatement[]
+  ): Promise<void> {
+    const facebookCommentId = val.comment_id || val.id;
+    if (!facebookCommentId) return;
+
+    if (verb === 'add') {
+      const post = await PostRepository.findPostByFacebookId(db, facebookPostId);
+      if (post) {
+        const existing = await db
+          .prepare('SELECT id FROM post_comments WHERE facebook_comment_id = ?')
+          .bind(facebookCommentId)
+          .first();
+
         if (!existing) {
-          const postId = crypto.randomUUID();
+          const commentId = crypto.randomUUID();
           const message = val.message || '';
-          
+          const fromName = val.sender_name || null;
+          const fromId = val.sender_id || null;
+
           let createdTime = Math.floor(Date.now() / 1000);
           if (val.created_time) {
             if (typeof val.created_time === 'number') {
@@ -240,107 +324,73 @@ export class SyncService {
             }
           }
 
-          const postShortId = facebookPostId.split('_')[1] || facebookPostId;
-          const permalink = `https://www.facebook.com/${facebookPageId}/posts/${postShortId}`;
+          const parentId = val.parent_id || null;
 
           statements.push(db.prepare(`
-            INSERT INTO posts(id, page_id, facebook_post_id, permalink, message, post_format, status, created_at, published_at, user_id, last_synced_at)
-            VALUES(?, ?, ?, ?, ?, 'Post', 'Published', ?, ?, ?, unixepoch())
-          `).bind(postId, page.id, facebookPostId, permalink, message, createdTime, createdTime, page.user_id));
-        }
-      } else if (verb === 'edited') {
-        const message = val.message || '';
-        statements.push(db.prepare('UPDATE posts SET message = ?, last_synced_at = unixepoch() WHERE facebook_post_id = ?').bind(message, facebookPostId));
-      } else if (verb === 'remove') {
-        statements.push(db.prepare("UPDATE posts SET status = 'Deleted', last_synced_at = unixepoch() WHERE facebook_post_id = ?").bind(facebookPostId));
-      }
-    } else if (item === 'comment') {
-      const facebookCommentId = val.comment_id || val.id;
-      if (!facebookCommentId || !facebookPostId) return statements;
+            INSERT INTO post_comments(id, facebook_comment_id, post_id, from_name, from_id, message, created_time, parent_id, fetched_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+          `).bind(commentId, facebookCommentId, post.id, fromName, fromId, message, createdTime, parentId));
 
-      if (verb === 'add') {
-        const post = await PostRepository.findPostByFacebookId(db, facebookPostId);
-        if (post) {
-          const existing = await db
-            .prepare('SELECT id FROM post_comments WHERE facebook_comment_id = ?')
-            .bind(facebookCommentId)
-            .first();
-
-          if (!existing) {
-            const commentId = crypto.randomUUID();
-            const message = val.message || '';
-            const fromName = val.sender_name || null;
-            const fromId = val.sender_id || null;
-
-            let createdTime = Math.floor(Date.now() / 1000);
-            if (val.created_time) {
-              if (typeof val.created_time === 'number') {
-                createdTime = val.created_time;
-              } else if (!isNaN(Number(val.created_time))) {
-                createdTime = Number(val.created_time);
-              } else {
-                const parsedDate = new Date(val.created_time);
-                if (!isNaN(parsedDate.getTime())) {
-                  createdTime = Math.floor(parsedDate.getTime() / 1000);
-                }
-              }
-            }
-
-            const parentId = val.parent_id || null;
-
-            statements.push(db.prepare(`
-              INSERT INTO post_comments(id, facebook_comment_id, post_id, from_name, from_id, message, created_time, parent_id, fetched_at)
-              VALUES(?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
-            `).bind(commentId, facebookCommentId, post.id, fromName, fromId, message, createdTime, parentId));
-
-            statements.push(db.prepare('UPDATE posts SET comments_count = comments_count + 1 WHERE id = ?').bind(post.id));
-          }
-        }
-      } else if (verb === 'edited') {
-        const message = val.message || '';
-        statements.push(db.prepare('UPDATE post_comments SET message = ? WHERE facebook_comment_id = ?').bind(message, facebookCommentId));
-      } else if (verb === 'remove') {
-        statements.push(db.prepare('DELETE FROM post_comments WHERE facebook_comment_id = ?').bind(facebookCommentId));
-
-        const post = await PostRepository.findPostByFacebookId(db, facebookPostId);
-        if (post) {
-          statements.push(db.prepare('UPDATE posts SET comments_count = MAX(0, comments_count - 1) WHERE id = ?').bind(post.id));
+          statements.push(db.prepare('UPDATE posts SET comments_count = comments_count + 1 WHERE id = ?').bind(post.id));
         }
       }
-    } else if (item === 'reaction' || item === 'like') {
-      const facebookCommentId = val.comment_id;
-      const increment = verb === 'add' ? 1 : (verb === 'remove' ? -1 : 0);
+    } else if (verb === 'edited') {
+      const message = val.message || '';
+      statements.push(db.prepare('UPDATE post_comments SET message = ? WHERE facebook_comment_id = ?').bind(message, facebookCommentId));
+    } else if (verb === 'remove') {
+      statements.push(db.prepare('DELETE FROM post_comments WHERE facebook_comment_id = ?').bind(facebookCommentId));
 
-      if (increment !== 0) {
-        if (facebookCommentId) {
-          statements.push(
-            db.prepare('UPDATE post_comments SET like_count = MAX(0, like_count + ?) WHERE facebook_comment_id = ?')
-              .bind(increment, facebookCommentId)
-          );
-        } else if (facebookPostId) {
-          const post = await PostRepository.findPostByFacebookId(db, facebookPostId);
-          if (post) {
-            statements.push(
-              db.prepare('UPDATE posts SET likes = MAX(0, likes + ?), last_synced_at = unixepoch() WHERE id = ?')
-                .bind(increment, post.id)
-            );
-          }
-        }
+      const post = await PostRepository.findPostByFacebookId(db, facebookPostId);
+      if (post) {
+        statements.push(db.prepare('UPDATE posts SET comments_count = MAX(0, comments_count - 1) WHERE id = ?').bind(post.id));
       }
-    } else if (item === 'share') {
-      const increment = verb === 'add' ? 1 : (verb === 'remove' ? -1 : 0);
+    }
+  }
 
-      if (increment !== 0 && facebookPostId) {
+  private static async handleWebhookReactionItem(
+    db: D1Database,
+    facebookPostId: string | null,
+    val: any,
+    verb: string,
+    statements: D1PreparedStatement[]
+  ): Promise<void> {
+    const facebookCommentId = val.comment_id;
+    const increment = verb === 'add' ? 1 : (verb === 'remove' ? -1 : 0);
+
+    if (increment !== 0) {
+      if (facebookCommentId) {
+        statements.push(
+          db.prepare('UPDATE post_comments SET like_count = MAX(0, like_count + ?) WHERE facebook_comment_id = ?')
+            .bind(increment, facebookCommentId)
+        );
+      } else if (facebookPostId) {
         const post = await PostRepository.findPostByFacebookId(db, facebookPostId);
         if (post) {
           statements.push(
-            db.prepare('UPDATE posts SET shares = MAX(0, shares + ?), last_synced_at = unixepoch() WHERE id = ?')
+            db.prepare('UPDATE posts SET likes = MAX(0, likes + ?), last_synced_at = unixepoch() WHERE id = ?')
               .bind(increment, post.id)
           );
         }
       }
     }
+  }
 
-    return statements;
+  private static async handleWebhookShareItem(
+    db: D1Database,
+    facebookPostId: string | null,
+    verb: string,
+    statements: D1PreparedStatement[]
+  ): Promise<void> {
+    const increment = verb === 'add' ? 1 : (verb === 'remove' ? -1 : 0);
+
+    if (increment !== 0 && facebookPostId) {
+      const post = await PostRepository.findPostByFacebookId(db, facebookPostId);
+      if (post) {
+        statements.push(
+          db.prepare('UPDATE posts SET shares = MAX(0, shares + ?), last_synced_at = unixepoch() WHERE id = ?')
+            .bind(increment, post.id)
+        );
+      }
+    }
   }
 }
