@@ -194,10 +194,9 @@ export class SyncService {
         break;
       case 'reaction':
       case 'like':
-        await this.handleWebhookReactionItem(db, facebookPostId, val, verb, statements);
-        break;
       case 'share':
-        await this.handleWebhookShareItem(db, facebookPostId, verb, statements);
+        // NO-OP: Ignore high-frequency events to prevent D1 write locks.
+        // These metrics are synced on-demand/periodically from the Dashboard.
         break;
     }
 
@@ -339,44 +338,6 @@ export class SyncService {
       const post = await PostRepository.findPostByFacebookId(db, facebookPostId);
       if (post) {
         statements.push(PostRepository.getUpdatePostCommentsCountStatement(db, post.id, -1));
-      }
-    }
-  }
-
-  private static async handleWebhookReactionItem(
-    db: D1Database,
-    facebookPostId: string | null,
-    val: any,
-    verb: string,
-    statements: D1PreparedStatement[]
-  ): Promise<void> {
-    const facebookCommentId = val.comment_id;
-    const increment = verb === 'add' ? 1 : (verb === 'remove' ? -1 : 0);
-
-    if (increment !== 0) {
-      if (facebookCommentId) {
-        statements.push(PostRepository.getUpdateCommentLikeCountStatement(db, facebookCommentId, increment));
-      } else if (facebookPostId) {
-        const post = await PostRepository.findPostByFacebookId(db, facebookPostId);
-        if (post) {
-          statements.push(PostRepository.getUpdatePostLikesCountStatement(db, post.id, increment));
-        }
-      }
-    }
-  }
-
-  private static async handleWebhookShareItem(
-    db: D1Database,
-    facebookPostId: string | null,
-    verb: string,
-    statements: D1PreparedStatement[]
-  ): Promise<void> {
-    const increment = verb === 'add' ? 1 : (verb === 'remove' ? -1 : 0);
-
-    if (increment !== 0 && facebookPostId) {
-      const post = await PostRepository.findPostByFacebookId(db, facebookPostId);
-      if (post) {
-        statements.push(PostRepository.getUpdatePostSharesCountStatement(db, post.id, increment));
       }
     }
   }
