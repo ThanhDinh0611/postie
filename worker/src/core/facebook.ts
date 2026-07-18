@@ -297,7 +297,10 @@ export async function getPagePosts(
 ): Promise<FacebookPostInfo[]> {
   const url = `${GRAPH_API_BASE}/${pageId}/posts?fields=id,message,created_time,permalink_url&limit=${limit}&access_token=${pageAccessToken}`;
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to fetch page posts: ${res.status}`);
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Failed to fetch page posts: ${res.status} - ${errText}`);
+  }
   const data = (await res.json()) as { data: FacebookPostInfo[] };
   return data.data ?? [];
 }
@@ -312,7 +315,10 @@ export async function getPostComments(
 ): Promise<FacebookComment[]> {
   const url = `${GRAPH_API_BASE}/${facebookPostId}/comments?fields=from,message,like_count,created_time,comments{from,message,like_count,created_time}&limit=${limit}&access_token=${pageAccessToken}`;
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to fetch post comments: ${res.status}`);
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Failed to fetch post comments: ${res.status} - ${errText}`);
+  }
   const data = (await res.json()) as { data: FacebookComment[] };
   return data.data ?? [];
 }
