@@ -1,6 +1,5 @@
 import { getPostComments, getPagePosts, batchGetPostEngagements } from '../core/facebook.ts';
 import { PostRepository } from '../db/PostRepository.ts';
-import { PageRepository } from '../db/PageRepository.ts';
 import { computeEngagementStats, formatSyncDuration, type SyncResult } from '../features/sync/sync.utils.ts';
 
 export class SyncService {
@@ -37,44 +36,37 @@ export class SyncService {
       const statements: D1PreparedStatement[] = [];
       
       if (toDelete.length > 0) {
-        const deletePh = toDelete.map(() => '?').join(',');
-        statements.push(db.prepare(`DELETE FROM post_comments WHERE facebook_comment_id IN (${deletePh})`).bind(...toDelete));
+        statements.push(PostRepository.getDeleteCommentsBatchStatement(db, toDelete));
       }
 
       for (const comment of fbComments) {
         if (!existingSet.has(comment.id)) {
-          statements.push(db.prepare(`
-            INSERT INTO post_comments(id, facebook_comment_id, post_id, from_name, from_id, message, like_count, created_time, fetched_at) 
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
-          `).bind(
-            crypto.randomUUID(),
-            comment.id,
-            postId,
-            comment.from?.name ?? null,
-            comment.from?.id ?? null,
-            comment.message ?? '',
-            comment.like_count ?? 0,
-            comment.created_time ? Math.floor(new Date(comment.created_time).getTime() / 1000) : null
-          ));
+          statements.push(PostRepository.getInsertCommentStatement(db, {
+            id: crypto.randomUUID(),
+            facebook_comment_id: comment.id,
+            post_id: postId,
+            from_name: comment.from?.name ?? null,
+            from_id: comment.from?.id ?? null,
+            message: comment.message ?? '',
+            like_count: comment.like_count ?? 0,
+            created_time: comment.created_time ? Math.floor(new Date(comment.created_time).getTime() / 1000) : null
+          }));
         }
 
         if (comment.comments?.data) {
           for (const reply of comment.comments.data) {
             if (!existingSet.has(reply.id)) {
-              statements.push(db.prepare(`
-                INSERT INTO post_comments(id, facebook_comment_id, post_id, from_name, from_id, message, like_count, created_time, parent_id, fetched_at) 
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
-              `).bind(
-                crypto.randomUUID(),
-                reply.id,
-                postId,
-                reply.from?.name ?? null,
-                reply.from?.id ?? null,
-                reply.message ?? '',
-                reply.like_count ?? 0,
-                reply.created_time ? Math.floor(new Date(reply.created_time).getTime() / 1000) : null,
-                comment.id
-              ));
+              statements.push(PostRepository.getInsertCommentStatement(db, {
+                id: crypto.randomUUID(),
+                facebook_comment_id: reply.id,
+                post_id: postId,
+                from_name: reply.from?.name ?? null,
+                from_id: reply.from?.id ?? null,
+                message: reply.message ?? '',
+                like_count: reply.like_count ?? 0,
+                created_time: reply.created_time ? Math.floor(new Date(reply.created_time).getTime() / 1000) : null,
+                parent_id: comment.id
+              }));
             }
           }
         }
@@ -124,38 +116,28 @@ export class SyncService {
         if (!existingId) continue;
         postId = existingId;
         
-        if (engagement) {
-          statements.push(db.prepare(`
-            UPDATE posts 
-            SET last_synced_at=unixepoch(),
-                likes=?, comments_count=?, shares=?, views=?, engagement_fetched_at=unixepoch() 
-            WHERE id=?
-          `).bind(engagement.likes, engagement.comments, engagement.shares, engagement.views, postId));
-        } else {
-          statements.push(db.prepare('UPDATE posts SET last_synced_at=unixepoch() WHERE id=?').bind(postId));
-        }
+        statements.push(PostRepository.getUpdatePostEngagementStatement(db, postId, engagement));
       } else {
         postId = crypto.randomUUID();
         const pubAt = p.created_time ? Math.floor(new Date(p.created_time).getTime() / 1000) : null;
         
-        if (engagement) {
-          statements.push(db.prepare(`
-            INSERT INTO posts(id, page_id, facebook_post_id, permalink, message, post_format, status, created_at, published_at, user_id, last_synced_at, likes, comments_count, shares, views, engagement_fetched_at) 
-            VALUES(?, ?, ?, ?, ?, 'Post', 'Published', ?, ?, ?, unixepoch(), ?, ?, ?, ?, unixepoch())
-          `).bind(
-            postId, page.id, p.id, p.permalink_url ?? null, p.message ?? '',
-            pubAt ?? Math.floor(Date.now() / 1000), pubAt, userId,
-            engagement.likes, engagement.comments, engagement.shares, engagement.views
-          ));
-        } else {
-          statements.push(db.prepare(`
-            INSERT INTO posts(id, page_id, facebook_post_id, permalink, message, post_format, status, created_at, published_at, user_id, last_synced_at) 
-            VALUES(?, ?, ?, ?, ?, 'Post', 'Published', ?, ?, ?, unixepoch())
-          `).bind(
-            postId, page.id, p.id, p.permalink_url ?? null, p.message ?? '',
-            pubAt ?? Math.floor(Date.now() / 1000), pubAt, userId
-          ));
-        }
+        statements.push(PostRepository.getInsertPostStatement(db, {
+          id: postId,
+          page_id: page.id,
+          facebook_post_id: p.id,
+          permalink: p.permalink_url ?? null,
+          message: p.message ?? '',
+          post_format: 'Post',
+          status: 'Published',
+          created_at: pubAt ?? Math.floor(Date.now() / 1000),
+          published_at: pubAt,
+          user_id: userId,
+          likes: engagement?.likes,
+          comments_count: engagement?.comments,
+          shares: engagement?.shares,
+          views: engagement?.views,
+          engagement_fetched_at: engagement ? Math.floor(Date.now() / 1000) : undefined
+        }));
       }
 
       results.push({
@@ -273,16 +255,24 @@ export class SyncService {
         const postShortId = facebookPostId.split('_')[1] || facebookPostId;
         const permalink = `https://www.facebook.com/${facebookPageId}/posts/${postShortId}`;
 
-        statements.push(db.prepare(`
-          INSERT INTO posts(id, page_id, facebook_post_id, permalink, message, post_format, status, created_at, published_at, user_id, last_synced_at)
-          VALUES(?, ?, ?, ?, ?, 'Post', 'Published', ?, ?, ?, unixepoch())
-        `).bind(postId, pageId, facebookPostId, permalink, message, createdTime, createdTime, userId));
+        statements.push(PostRepository.getInsertPostStatement(db, {
+          id: postId,
+          page_id: pageId,
+          facebook_post_id: facebookPostId,
+          permalink,
+          message,
+          post_format: 'Post',
+          status: 'Published',
+          created_at: createdTime,
+          published_at: createdTime,
+          user_id: userId
+        }));
       }
     } else if (verb === 'edited') {
       const message = val.message || '';
-      statements.push(db.prepare('UPDATE posts SET message = ?, last_synced_at = unixepoch() WHERE facebook_post_id = ?').bind(message, facebookPostId));
+      statements.push(PostRepository.getUpdatePostMessageStatement(db, facebookPostId, message));
     } else if (verb === 'remove') {
-      statements.push(db.prepare("UPDATE posts SET status = 'Deleted', last_synced_at = unixepoch() WHERE facebook_post_id = ?").bind(facebookPostId));
+      statements.push(PostRepository.getMarkPostDeletedStatement(db, facebookPostId));
     }
   }
 
@@ -326,23 +316,29 @@ export class SyncService {
 
           const parentId = val.parent_id || null;
 
-          statements.push(db.prepare(`
-            INSERT INTO post_comments(id, facebook_comment_id, post_id, from_name, from_id, message, created_time, parent_id, fetched_at)
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
-          `).bind(commentId, facebookCommentId, post.id, fromName, fromId, message, createdTime, parentId));
+          statements.push(PostRepository.getInsertCommentStatement(db, {
+            id: commentId,
+            facebook_comment_id: facebookCommentId,
+            post_id: post.id,
+            from_name: fromName,
+            from_id: fromId,
+            message,
+            created_time: createdTime,
+            parent_id: parentId
+          }));
 
-          statements.push(db.prepare('UPDATE posts SET comments_count = comments_count + 1 WHERE id = ?').bind(post.id));
+          statements.push(PostRepository.getUpdatePostCommentsCountStatement(db, post.id, 1));
         }
       }
     } else if (verb === 'edited') {
       const message = val.message || '';
-      statements.push(db.prepare('UPDATE post_comments SET message = ? WHERE facebook_comment_id = ?').bind(message, facebookCommentId));
+      statements.push(PostRepository.getUpdateCommentMessageStatement(db, facebookCommentId, message));
     } else if (verb === 'remove') {
-      statements.push(db.prepare('DELETE FROM post_comments WHERE facebook_comment_id = ?').bind(facebookCommentId));
+      statements.push(PostRepository.getDeleteCommentStatement(db, facebookCommentId));
 
       const post = await PostRepository.findPostByFacebookId(db, facebookPostId);
       if (post) {
-        statements.push(db.prepare('UPDATE posts SET comments_count = MAX(0, comments_count - 1) WHERE id = ?').bind(post.id));
+        statements.push(PostRepository.getUpdatePostCommentsCountStatement(db, post.id, -1));
       }
     }
   }
@@ -359,17 +355,11 @@ export class SyncService {
 
     if (increment !== 0) {
       if (facebookCommentId) {
-        statements.push(
-          db.prepare('UPDATE post_comments SET like_count = MAX(0, like_count + ?) WHERE facebook_comment_id = ?')
-            .bind(increment, facebookCommentId)
-        );
+        statements.push(PostRepository.getUpdateCommentLikeCountStatement(db, facebookCommentId, increment));
       } else if (facebookPostId) {
         const post = await PostRepository.findPostByFacebookId(db, facebookPostId);
         if (post) {
-          statements.push(
-            db.prepare('UPDATE posts SET likes = MAX(0, likes + ?), last_synced_at = unixepoch() WHERE id = ?')
-              .bind(increment, post.id)
-          );
+          statements.push(PostRepository.getUpdatePostLikesCountStatement(db, post.id, increment));
         }
       }
     }
@@ -386,10 +376,7 @@ export class SyncService {
     if (increment !== 0 && facebookPostId) {
       const post = await PostRepository.findPostByFacebookId(db, facebookPostId);
       if (post) {
-        statements.push(
-          db.prepare('UPDATE posts SET shares = MAX(0, shares + ?), last_synced_at = unixepoch() WHERE id = ?')
-            .bind(increment, post.id)
-        );
+        statements.push(PostRepository.getUpdatePostSharesCountStatement(db, post.id, increment));
       }
     }
   }

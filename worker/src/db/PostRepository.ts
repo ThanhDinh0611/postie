@@ -276,4 +276,99 @@ export class PostRepository {
       .all<{ facebook_comment_id: string }>();
     return rows.results?.map(r => r.facebook_comment_id) ?? [];
   }
+
+  // --- PreparedStatement Factory Methods (for batch processing in Services) ---
+
+  static getDeleteCommentsBatchStatement(db: D1Database, ids: string[]): D1PreparedStatement {
+    const deletePh = ids.map(() => '?').join(',');
+    return db.prepare(`DELETE FROM post_comments WHERE facebook_comment_id IN (${deletePh})`).bind(...ids);
+  }
+
+  static getInsertCommentStatement(db: D1Database, comment: Partial<CommentRow>): D1PreparedStatement {
+    const fields = [
+      'id', 'facebook_comment_id', 'post_id', 'from_name', 'from_id',
+      'message', 'like_count', 'created_time', 'parent_id'
+    ];
+    const placeholders = fields.map(() => '?').join(', ');
+    const binds = fields.map(f => (comment as any)[f] ?? null);
+
+    return db.prepare(`
+      INSERT INTO post_comments (${fields.join(', ')}, fetched_at)
+      VALUES (${placeholders}, unixepoch())
+    `).bind(...binds);
+  }
+
+  static getUpdatePostEngagementStatement(
+    db: D1Database,
+    id: string,
+    engagement: { likes: number; comments: number; shares: number; views: number } | null
+  ): D1PreparedStatement {
+    if (engagement) {
+      return db.prepare(`
+        UPDATE posts 
+        SET last_synced_at=unixepoch(),
+            likes=?, comments_count=?, shares=?, views=?, engagement_fetched_at=unixepoch() 
+        WHERE id=?
+      `).bind(engagement.likes, engagement.comments, engagement.shares, engagement.views, id);
+    }
+    return db.prepare('UPDATE posts SET last_synced_at=unixepoch() WHERE id=?').bind(id);
+  }
+
+  static getInsertPostStatement(
+    db: D1Database,
+    post: Partial<PostRow> & { likes?: number; comments_count?: number; shares?: number; views?: number; engagement_fetched_at?: number }
+  ): D1PreparedStatement {
+    const fields = [
+      'id', 'page_id', 'facebook_post_id', 'permalink', 'message', 'media_url',
+      'hook_type', 'copywriting_formula', 'tone', 'post_format', 'status',
+      'scheduled_for', 'created_at', 'published_at', 'user_id', 'campaign_id', 'generation_id'
+    ];
+    
+    // Optional metrics fields (for syncing fb posts directly)
+    if (post.likes !== undefined) fields.push('likes');
+    if (post.comments_count !== undefined) fields.push('comments_count');
+    if (post.shares !== undefined) fields.push('shares');
+    if (post.views !== undefined) fields.push('views');
+    if (post.engagement_fetched_at !== undefined) fields.push('engagement_fetched_at');
+
+    const placeholders = fields.map(() => '?').join(', ');
+    const binds = fields.map(f => (post as any)[f] ?? null);
+
+    return db.prepare(`
+      INSERT INTO posts (${fields.join(', ')}, last_synced_at)
+      VALUES (${placeholders}, unixepoch())
+    `).bind(...binds);
+  }
+
+  static getUpdatePostMessageStatement(db: D1Database, facebookPostId: string, message: string): D1PreparedStatement {
+    return db.prepare('UPDATE posts SET message = ?, last_synced_at = unixepoch() WHERE facebook_post_id = ?').bind(message, facebookPostId);
+  }
+
+  static getMarkPostDeletedStatement(db: D1Database, facebookPostId: string): D1PreparedStatement {
+    return db.prepare("UPDATE posts SET status = 'Deleted', last_synced_at = unixepoch() WHERE facebook_post_id = ?").bind(facebookPostId);
+  }
+
+  static getUpdateCommentMessageStatement(db: D1Database, facebookCommentId: string, message: string): D1PreparedStatement {
+    return db.prepare('UPDATE post_comments SET message = ? WHERE facebook_comment_id = ?').bind(message, facebookCommentId);
+  }
+
+  static getDeleteCommentStatement(db: D1Database, facebookCommentId: string): D1PreparedStatement {
+    return db.prepare('DELETE FROM post_comments WHERE facebook_comment_id = ?').bind(facebookCommentId);
+  }
+
+  static getUpdatePostCommentsCountStatement(db: D1Database, postId: string, increment: number): D1PreparedStatement {
+    return db.prepare('UPDATE posts SET comments_count = MAX(0, comments_count + ?) WHERE id = ?').bind(increment, postId);
+  }
+
+  static getUpdateCommentLikeCountStatement(db: D1Database, facebookCommentId: string, increment: number): D1PreparedStatement {
+    return db.prepare('UPDATE post_comments SET like_count = MAX(0, like_count + ?) WHERE facebook_comment_id = ?').bind(increment, facebookCommentId);
+  }
+
+  static getUpdatePostLikesCountStatement(db: D1Database, postId: string, increment: number): D1PreparedStatement {
+    return db.prepare('UPDATE posts SET likes = MAX(0, likes + ?), last_synced_at = unixepoch() WHERE id = ?').bind(increment, postId);
+  }
+
+  static getUpdatePostSharesCountStatement(db: D1Database, postId: string, increment: number): D1PreparedStatement {
+    return db.prepare('UPDATE posts SET shares = MAX(0, shares + ?), last_synced_at = unixepoch() WHERE id = ?').bind(increment, postId);
+  }
 }
