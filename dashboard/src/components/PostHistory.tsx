@@ -42,6 +42,11 @@ export default function PostHistory() {
   const posts = postsQuery.data ?? [];
   const loading = postsQuery.isFetching;
   const syncing = syncAllPostsMutation.isPending;
+  const error = postsQuery.error;
+
+  // Debug: log posts data to console
+  console.log('[PostHistory] pages loaded:', pages.length, 'pageFilter:', pageFilter);
+  console.log('[PostHistory] postsQuery state:', { isLoading: postsQuery.isLoading, isFetching: postsQuery.isFetching, isError: postsQuery.isError, dataLength: posts?.length, error: postsQuery.error });
 
   const handleRefresh = () => {
     postsQuery.refetch();
@@ -75,7 +80,12 @@ export default function PostHistory() {
         syncing={syncing}
       />
 
-      {loading && posts.length === 0 ? (
+      {error ? (
+        <div className="placeholder-card" style={{ borderColor: '#ef4444' }}>
+          <p style={{ color: '#ef4444' }}>❌ Lỗi tải dữ liệu: {error instanceof Error ? error.message : String(error)}</p>
+          <button className="btn btn-sm" onClick={handleRefresh}>Thử lại</button>
+        </div>
+      ) : loading && posts.length === 0 ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
           Đang tải lịch sử bài viết...
         </div>
