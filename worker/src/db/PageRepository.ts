@@ -30,6 +30,14 @@ export class PageRepository {
     return rows.results ?? [];
   }
 
+  static async getPagesByUserWithTokens(db: D1Database, userId: string): Promise<PageRow[]> {
+    const rows = await db
+      .prepare('SELECT id, facebook_page_id, name, username, access_token, avatar_url, is_active, user_id FROM pages WHERE user_id = ? ORDER BY created_at DESC')
+      .bind(userId)
+      .all<PageRow>();
+    return rows.results ?? [];
+  }
+
   static async findPageByIdAndUser(db: D1Database, pageId: string, userId: string): Promise<PageRow | null> {
     return db
       .prepare('SELECT id, facebook_page_id, name, username, access_token, avatar_url, is_active, user_id FROM pages WHERE id = ? AND user_id = ?')

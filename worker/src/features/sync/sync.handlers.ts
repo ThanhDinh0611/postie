@@ -109,7 +109,7 @@ syncRouter.post('/sync/posts', async (c) => {
   const statements: D1PreparedStatement[] = [];
 
   try {
-    let pages = await PageRepository.getPagesByUser(c.env.DB, uid);
+    let pages = await PageRepository.getPagesByUserWithTokens(c.env.DB, uid);
     if (!pages.length) return c.json({ error: 'No Facebook pages connected.' }, 400);
 
     if (targetPageId && targetPageId !== 'all') {
