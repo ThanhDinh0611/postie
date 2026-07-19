@@ -297,6 +297,9 @@ export default function HomePage() {
               isPublishing={publishReelMutation.isPending || uploadVideoMutation.isPending}
               onPublish={handlePublishReel}
               publishProgress={publishProgress}
+              pages={pages}
+              selectedPageId={selectedPageId}
+              setSelectedPageId={setSelectedPageId}
             />
           ) : (
             <PostPreview

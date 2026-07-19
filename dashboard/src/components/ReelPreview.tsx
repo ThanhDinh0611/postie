@@ -1,4 +1,4 @@
-import type { ReelScriptSegment } from '@/api/types.ts';
+import type { ReelScriptSegment, PageData } from '@/api/types.ts';
 
 interface ReelPreviewProps {
   caption: string;
@@ -11,6 +11,9 @@ interface ReelPreviewProps {
   isPublishing: boolean;
   onPublish: () => void;
   publishProgress: string;
+  pages: PageData[];
+  selectedPageId: string;
+  setSelectedPageId: (id: string) => void;
 }
 
 export default function ReelPreview({
@@ -24,6 +27,9 @@ export default function ReelPreview({
   isPublishing,
   onPublish,
   publishProgress,
+  pages,
+  selectedPageId,
+  setSelectedPageId,
 }: ReelPreviewProps) {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -148,14 +154,40 @@ export default function ReelPreview({
         </div>
       )}
 
-      <button
-        className="btn btn-primary w-full justify-center"
-        style={{ padding: '0.75rem', marginTop: '1rem' }}
-        onClick={onPublish}
-        disabled={isPublishing || !videoFile || !caption}
-      >
-        {isPublishing ? '⏳ Đang đăng Reel...' : 'Đăng Reel lên Fanpage 🎬'}
-      </button>
+      <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: '1rem' }} className="flex-col gap-12">
+        <div className="form-group mb-0">
+          <label className="font-semibold">📢 Chọn Fanpage đăng bài</label>
+          {pages.length === 0 ? (
+            <div className="text-muted text-base" style={{ marginTop: '0.25rem' }}>
+              Chưa có trang Facebook nào được kết nối. Vui lòng kết nối trang trong tab <a href="/pages">Trang Facebook</a>.
+            </div>
+          ) : (
+            <select
+              id="publishPage"
+              className="form-control"
+              value={selectedPageId}
+              onChange={(e) => setSelectedPageId(e.target.value)}
+              disabled={isPublishing}
+            >
+              <option value="">-- Chọn một Fanpage đã kết nối --</option>
+              {pages.map(page => (
+                <option key={page.id} value={page.id}>
+                  {page.name} ({page.username ? `@${page.username}` : page.facebook_page_id}) {page.is_active ? '★' : ''}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        <button
+          className="btn btn-primary w-full justify-center"
+          style={{ padding: '0.75rem' }}
+          onClick={onPublish}
+          disabled={isPublishing || !videoFile || !caption || !selectedPageId}
+        >
+          {isPublishing ? '⏳ Đang đăng Reel...' : 'Đăng Reel lên Fanpage 🎬'}
+        </button>
+      </div>
     </div>
   );
 }
