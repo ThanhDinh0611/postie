@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { CampaignData } from '../api.ts';
+import type { CampaignData } from '@/api/types.ts';
+import FileAttachment from '@/components/FileAttachment.tsx';
 
 export const HOOK_OPTIONS = [
   '1. Sự thật thú vị (Interesting fact)',
@@ -37,13 +38,11 @@ interface PostGeneratorProps {
   }) => void;
   isGenerating: boolean;
 
-  // Image assets managed by cropper hook
   attachedFile: File | null;
   attachedImage: string | null;
   onImageSelect: (file: File) => void;
   onImageRemove: () => void;
 
-  // Publish type state (needed by parent for aspect ratio updates)
   publishType: 'image' | 'link';
   setPublishType: (type: 'image' | 'link') => void;
 }
@@ -59,7 +58,6 @@ export default function PostGenerator({
   publishType,
   setPublishType
 }: PostGeneratorProps) {
-  // Local form state
   const [topic, setTopic] = useState('');
   const [hookType, setHookType] = useState('1. Sự thật thú vị (Interesting fact)');
   const [formula, setFormula] = useState('PAS (Problem-Agitation-Solution)');
@@ -83,16 +81,9 @@ export default function PostGenerator({
     });
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      onImageSelect(file);
-    }
-  };
-
   return (
-    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.5rem' }}>
-      <h3 style={{ marginBottom: '1.25rem', fontSize: '1.1rem', fontWeight: 600 }}>⚙️ Cấu hình nội dung AI</h3>
+    <div className="card">
+      <h3 className="text-lg font-semibold" style={{ marginBottom: '1.25rem' }}>⚙️ Cấu hình nội dung AI</h3>
       <form onSubmit={handleSubmit}>
         <div className="form-group">
           <label htmlFor="topic">Chủ đề bài viết</label>
@@ -107,8 +98,7 @@ export default function PostGenerator({
           />
         </div>
 
-        {/* Publish Type selector */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '1rem' }}>
+        <div className="flex" style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '1rem' }}>
           <div className="form-group">
             <label htmlFor="publishType">Định dạng xuất bản</label>
             <select
@@ -139,7 +129,6 @@ export default function PostGenerator({
           </div>
         </div>
 
-        {/* Target URL - Only visible for Link Post */}
         {publishType === 'link' && (
           <div className="form-group">
             <label htmlFor="targetUrl">Link đích (Destination URL)</label>
@@ -156,7 +145,6 @@ export default function PostGenerator({
           </div>
         )}
 
-        {/* Campaign selector */}
         <div className="form-group">
           <label htmlFor="campaign">Chiến dịch tiếp thị (Campaign)</label>
           <select
@@ -173,7 +161,7 @@ export default function PostGenerator({
           </select>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+        <div className="flex" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
           <div className="form-group">
             <label htmlFor="postFormat">Định dạng bài viết</label>
             <select
@@ -220,64 +208,19 @@ export default function PostGenerator({
           </select>
         </div>
 
-        {/* Image Attachment */}
-        <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1.25rem', marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <div>
-            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.4rem' }}>
-              🖼️ Đính kèm hình ảnh {publishType === 'link' ? '(để tạo Link Preview Card)' : ''}
-            </label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <input
-                type="file"
-                accept="image/*"
-                id="image-attachment-generator"
-                style={{ display: 'none' }}
-                onChange={handleFileChange}
-                disabled={isGenerating}
-              />
-              <label
-                htmlFor="image-attachment-generator"
-                className="btn btn-sm"
-                style={{
-                  cursor: 'pointer', background: 'var(--bg-secondary)',
-                  color: 'var(--text-secondary)', display: 'inline-flex',
-                  alignItems: 'center', gap: '0.35rem', pointerEvents: isGenerating ? 'none' : 'auto',
-                  opacity: isGenerating ? 0.6 : 1
-                }}
-              >
-                📁 Chọn ảnh từ thiết bị
-              </label>
-              {attachedFile && (
-                <span style={{ fontSize: '0.75rem', color: 'var(--success)' }}>✓ Đã đính kèm ảnh</span>
-              )}
-            </div>
-            {attachedImage && (
-              <div style={{ position: 'relative', width: '100%', maxHeight: '120px', borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--border)', marginTop: '0.65rem' }}>
-                <img src={attachedImage} alt="Preview" style={{ width: '100%', height: '120px', objectFit: 'cover' }} />
-                <button
-                  type="button"
-                  onClick={onImageRemove}
-                  style={{
-                    position: 'absolute', top: '0.25rem', right: '0.25rem',
-                    width: 20, height: 20, borderRadius: '50%',
-                    background: 'rgba(0,0,0,0.7)', border: 'none', color: '#fff',
-                    fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    lineHeight: 1
-                  }}
-                  title="Gỡ ảnh"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        <FileAttachment
+          attachedFile={attachedFile}
+          attachedImage={attachedImage}
+          onImageSelect={onImageSelect}
+          onImageRemove={onImageRemove}
+          isGenerating={isGenerating}
+          publishType={publishType}
+        />
 
         <button
           type="submit"
-          className="btn btn-primary"
-          style={{ width: '100%', justifyContent: 'center', marginTop: '1.25rem', padding: '0.75rem' }}
+          className="btn btn-primary w-full justify-center"
+          style={{ marginTop: '1.25rem', padding: '0.75rem' }}
           disabled={isGenerating || !topic.trim()}
         >
           {isGenerating ? '⏳ Đang tạo nội dung AI...' : 'Tạo bài viết với AI 🤖'}

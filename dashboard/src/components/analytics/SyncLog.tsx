@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { type SyncResponse, type SyncStats } from '../../api.ts';
-import { formatNumber } from '../../utils/formatters.ts';
+import { type SyncResponse, type SyncStats } from '@/api/types.ts';
+import { formatNumber } from '@/utils/formatters.ts';
 
 interface SyncLogProps {
   results: SyncResponse['results'];

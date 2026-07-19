@@ -6,16 +6,14 @@ import {
   publishPost,
   clearPostCache,
   uploadImage,
-  getPostComments,
   createPostComment,
   generateComment,
   deletePost,
   deletePostComment,
-  type GenerateRequest,
-  type PublishRequest
-} from '../api.ts';
+} from '@/api/client.ts';
+import type { GenerateRequest, PublishRequest } from '@/api/types.ts';
 
-export function usePosts(filters?: { status?: string; pageId?: string; campaignId?: string; sortBy?: string }) {
+export function usePosts(filters?: { status?: string; pageId?: string; campaignId?: string; sortBy?: string; offset?: number; limit?: number }) {
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
 
@@ -25,7 +23,8 @@ export function usePosts(filters?: { status?: string; pageId?: string; campaignI
       const token = await getToken();
       if (!token) throw new Error('Not authenticated');
       return getPosts(token, filters);
-    }
+    },
+    placeholderData: (prev) => prev
   });
 
   const generatePostMutation = useMutation({
@@ -76,19 +75,6 @@ export function usePosts(filters?: { status?: string; pageId?: string; campaignI
     }
   });
 
-  const useComments = (postId: string) => {
-    return useQuery({
-      queryKey: ['post-comments', postId],
-      queryFn: async () => {
-        if (!postId) return { comments: [], replies: [], totalCount: 0 };
-        const token = await getToken();
-        if (!token) throw new Error('Not authenticated');
-        return getPostComments(postId, token);
-      },
-      enabled: !!postId
-    });
-  };
-
   const createCommentMutation = useMutation({
     mutationFn: async ({ postId, message, attachmentUrl }: { postId: string; message: string; attachmentUrl?: string }) => {
       const token = await getToken();
@@ -128,7 +114,6 @@ export function usePosts(filters?: { status?: string; pageId?: string; campaignI
     clearCacheMutation,
     uploadImageMutation,
     deletePostMutation,
-    useComments,
     createCommentMutation,
     generateCommentMutation,
     deleteCommentMutation

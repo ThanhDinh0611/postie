@@ -1,5 +1,5 @@
-import type { PageData } from '../api.ts';
-import { useToast } from '../hooks/useToast.tsx';
+import type { PageData } from '@/api/types.ts';
+import { useToast } from '@/hooks/useToast.tsx';
 
 interface PostPreviewProps {
   content: string;
@@ -10,7 +10,6 @@ interface PostPreviewProps {
   setSelectedPageId: (id: string) => void;
   attachedImage: string | null;
 
-  // Clipy Link Preview Props
   publishType: 'image' | 'link';
   linkTitle: string;
   setLinkTitle: (val: string) => void;
@@ -40,36 +39,34 @@ export default function PostPreview({
   };
 
   return (
-    <div className="preview-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+    <div className="preview-card">
       <div className="preview-header">
-        <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>📝 Nội dung bài viết</h3>
+        <h3 className="text-lg font-semibold">📝 Nội dung bài viết</h3>
         <button className="btn btn-sm" onClick={handleCopy}>
           📋 Sao chép
         </button>
       </div>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-        {/* Render attached image if present (acts as post image or link preview image) */}
+      <div className="flex-1 flex-col gap-12" style={{ display: 'flex' }}>
         {attachedImage && (
           <div style={{ position: 'relative', width: '100%', maxHeight: '200px', borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--border)' }}>
-            <img src={attachedImage} alt="Attached preview" style={{ width: '100%', height: '100%', maxHeight: '200px', objectFit: 'cover' }} />
+            <img src={attachedImage} alt="Attached preview" loading="lazy" style={{ width: '100%', height: '100%', maxHeight: '200px', objectFit: 'cover' }} />
           </div>
         )}
 
-        <div className="preview-body" style={{ flex: 1 }}>
+        <div className="preview-body flex-1">
           {content}
         </div>
       </div>
 
-      {/* Clipy Link Preview review & edit panel */}
       {publishType === 'link' && (
-        <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <h4 style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem' }} className="flex-col gap-12">
+          <h4 className="text-base font-semibold text-accent flex items-center gap-6">
             🔗 Xem trước & Sửa thẻ Link Preview (Clipy)
           </h4>
           
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label htmlFor="linkTitle" style={{ fontSize: '0.78rem', fontWeight: 500 }}>Tiêu đề Link Card</label>
+          <div className="form-group mb-0">
+            <label htmlFor="linkTitle" className="text-sm font-medium">Tiêu đề Link Card</label>
             <input
               type="text"
               id="linkTitle"
@@ -82,8 +79,8 @@ export default function PostPreview({
             />
           </div>
 
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label htmlFor="linkDescription" style={{ fontSize: '0.78rem', fontWeight: 500 }}>Mô tả Link Card</label>
+          <div className="form-group mb-0">
+            <label htmlFor="linkDescription" className="text-sm font-medium">Mô tả Link Card</label>
             <textarea
               id="linkDescription"
               className="form-control"
@@ -98,12 +95,11 @@ export default function PostPreview({
         </div>
       )}
 
-      {/* Publication controls */}
-      <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-        <div className="form-group" style={{ marginBottom: 0 }}>
-          <label htmlFor="publishPage" style={{ fontWeight: 600 }}>📢 Chọn Fanpage đăng bài</label>
+      <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem' }} className="flex-col gap-12">
+        <div className="form-group mb-0">
+          <label className="font-semibold">📢 Chọn Fanpage đăng bài</label>
           {pages.length === 0 ? (
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+            <div className="text-muted text-base" style={{ marginTop: '0.25rem' }}>
               Chưa có trang Facebook nào được kết nối. Vui lòng kết nối trang trong tab <a href="/pages">Trang Facebook</a>.
             </div>
           ) : (
@@ -125,10 +121,10 @@ export default function PostPreview({
         </div>
 
         <button
-          className="btn btn-primary"
-          style={{ width: '100%', justifyContent: 'center', padding: '0.75rem' }}
+          className="btn btn-primary w-full justify-center"
+          style={{ padding: '0.75rem' }}
           onClick={() => onPublish(content)}
-          disabled={isPublishing || pages.length === 0 || !selectedPageId}
+          disabled={isPublishing || pages.length === 0 || !selectedPageId || !content.trim()}
         >
           {isPublishing ? '⏳ Đang đăng bài lên Facebook...' : 'Đăng lên Fanpage ngay 🚀'}
         </button>

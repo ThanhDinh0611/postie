@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
-import { usePages } from '../hooks/usePages.ts';
-import { useCampaigns } from '../hooks/useCampaigns.ts';
-import { usePosts } from '../hooks/usePosts.ts';
-import { useImageCropper } from '../hooks/useImageCropper.ts';
-import { useToast } from '../hooks/useToast.tsx';
-import PostGenerator from './PostGenerator.tsx';
-import PostPreview from './PostPreview.tsx';
-import LinkResultCard from './LinkResultCard.tsx';
-import PublishModal from './PublishModal.tsx';
-import ImageCropperModal from './ImageCropperModal.tsx';
-import type { GenerateResponse, PublishResponse } from '../api.ts';
+import { usePages } from '@/hooks/usePages.ts';
+import { useCampaigns } from '@/hooks/useCampaigns.ts';
+import { usePosts } from '@/hooks/usePosts.ts';
+import { useImageCropper } from '@/hooks/useImageCropper.ts';
+import { useToast } from '@/hooks/useToast.tsx';
+import { toErrorMessage } from '@/utils/errors.ts';
+import PostGenerator from '@/components/PostGenerator.tsx';
+import PostPreview from '@/components/PostPreview.tsx';
+import LinkResultCard from '@/components/LinkResultCard.tsx';
+import PublishModal from '@/components/PublishModal.tsx';
+import ImageCropperModal from '@/components/ImageCropperModal.tsx';
+import type { GenerateResponse, PublishResponse } from '@/api/types.ts';
 
 export default function HomePage() {
   const { addToast } = useToast();
@@ -53,7 +54,7 @@ export default function HomePage() {
     if (pages.length > 0 && !selectedPageId) {
       const active = pages.find(p => p.is_active);
       if (active) setSelectedPageId(active.id);
-      else setSelectedPageId(pages[0]!.id);
+      else setSelectedPageId(pages[0]?.id ?? '');
     }
   }, [pages, selectedPageId]);
 
@@ -83,7 +84,7 @@ export default function HomePage() {
       setLinkTitle(result.linkTitle ?? '');
       setLinkDescription(result.linkDescription ?? '');
     } catch (err) {
-      addToast(`Lỗi tạo bài viết: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      addToast(`Lỗi tạo bài viết: ${toErrorMessage(err)}`, 'error');
     }
   };
 
@@ -138,7 +139,7 @@ export default function HomePage() {
       setShowPublishModal(false);
       addToast(scheduledAt ? 'Đã lên lịch bài viết thành công! 📅' : 'Đăng bài lên Fanpage thành công! 🚀', 'success');
     } catch (err) {
-      addToast(`Lỗi đăng bài: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      addToast(`Lỗi đăng bài: ${toErrorMessage(err)}`, 'error');
     } finally {
       setPublishProgress('');
     }
@@ -159,7 +160,7 @@ export default function HomePage() {
 
   return (
     <div className="container">
-      <div style={{ height: 24 }} />
+      <div className="spacer-24" />
       <h2>Tạo bài viết mới</h2>
       <p className="text-muted">AI sẽ viết nội dung dựa trên chủ đề, tối ưu cho Facebook.</p>
 

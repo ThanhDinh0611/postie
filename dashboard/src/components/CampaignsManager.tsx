@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useCampaigns } from '../hooks/useCampaigns.ts';
-import type { CampaignData } from '../api.ts';
+import { useCampaigns } from '@/hooks/useCampaigns.ts';
+import { toErrorMessage } from '@/utils/errors.ts';
+import type { CampaignData } from '@/api/types.ts';
 
-const PALETTE = [
+const PALETTE: Array<{ name: string; value: string }> = [
   { name: 'Xanh dương', value: '#3b82f6' },
   { name: 'Xanh lá', value: '#10b981' },
   { name: 'Cam', value: '#f59e0b' },
@@ -12,24 +13,18 @@ const PALETTE = [
   { name: 'Teal', value: '#06b6d4' }
 ];
 
+const DEFAULT_COLOR: string = PALETTE[0]?.value ?? '#3b82f6';
+
 export default function CampaignsManager() {
-  const {
-    campaignsQuery,
-    createCampaignMutation,
-    updateCampaignMutation,
-    deleteCampaignMutation
-  } = useCampaigns();
+  const { campaignsQuery, createCampaignMutation, updateCampaignMutation, deleteCampaignMutation } = useCampaigns();
 
   const campaigns = campaignsQuery.data ?? [];
   const loading = campaignsQuery.isFetching;
 
   const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
-  
-  // Form states
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [color, setColor] = useState(PALETTE[0]!.value);
-  
+  const [color, setColor] = useState(DEFAULT_COLOR);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -41,23 +36,18 @@ export default function CampaignsManager() {
 
     try {
       if (editingCampaignId) {
-        await updateCampaignMutation.mutateAsync({
-          id: editingCampaignId,
-          data: { title, description, color }
-        });
+        await updateCampaignMutation.mutateAsync({ id: editingCampaignId, data: { title, description, color } });
         setSuccess('Đã cập nhật chiến dịch!');
         setEditingCampaignId(null);
       } else {
         await createCampaignMutation.mutateAsync({ title, description, color });
         setSuccess('Đã tạo chiến dịch mới!');
       }
-
-      // Reset form
       setTitle('');
       setDescription('');
-      setColor(PALETTE[0]!.value);
+      setColor(DEFAULT_COLOR);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save campaign');
+      setError(toErrorMessage(err, 'Failed to save campaign'));
     }
   };
 
@@ -76,70 +66,49 @@ export default function CampaignsManager() {
   };
 
   const handleDelete = async (c: CampaignData) => {
-    if (!confirm(`Xóa chiến dịch "${c.title}"? Các bài viết thuộc chiến dịch này sẽ không bị xóa nhưng sẽ không còn thuộc chiến dịch nào.`)) return;
+    if (!confirm(`Xóa chiến dịch "${c.title}"?`)) return;
     setError(null);
     try {
       await deleteCampaignMutation.mutateAsync(c.id);
       setSuccess('Đã xóa chiến dịch!');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete campaign');
+      setError(toErrorMessage(err, 'Failed to delete campaign'));
     }
   };
 
-  const handleRefresh = () => {
-    campaignsQuery.refetch();
-  };
+  const handleRefresh = () => { campaignsQuery.refetch(); };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '2rem', alignItems: 'start' }}>
-      {/* Form column */}
-      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.5rem' }}>
-        <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '1.25rem' }}>
+    <div className="flex" style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '2rem', alignItems: 'start' }}>
+      <div className="card">
+        <h3 className="text-md font-semibold" style={{ marginBottom: '1.25rem' }}>
           {editingCampaignId ? '📝 Sửa chiến dịch' : '📁 Tạo chiến dịch tiếp thị mới'}
         </h3>
-        
-        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div className="form-group" style={{ marginBottom: 0 }}>
+
+        <form onSubmit={handleSave} className="flex-col gap-16">
+          <div className="form-group mb-0">
             <label htmlFor="c-title">Tên chiến dịch</label>
-            <input
-              id="c-title"
-              type="text"
-              className="form-control"
-              placeholder="Ví dụ: Khai trương, Promotion Hè, Mini game..."
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              required
-            />
+            <input id="c-title" type="text" className="form-control" placeholder="Ví dụ: Khai trương, Promotion Hè, Mini game..." value={title} onChange={e => setTitle(e.target.value)} required />
           </div>
 
-          <div className="form-group" style={{ marginBottom: 0 }}>
+          <div className="form-group mb-0">
             <label htmlFor="c-desc">Mô tả ngắn</label>
-            <textarea
-              id="c-desc"
-              className="form-control"
-              placeholder="Mục tiêu của chiến dịch..."
-              style={{ minHeight: '60px' }}
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-            />
+            <textarea id="c-desc" className="form-control" placeholder="Mục tiêu của chiến dịch..." style={{ minHeight: '60px' }} value={description} onChange={e => setDescription(e.target.value)} />
           </div>
 
-          <div className="form-group" style={{ marginBottom: 0 }}>
+          <div className="form-group mb-0">
             <label>Màu sắc nhận diện</label>
-            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+            <div className="flex gap-6 flex-wrap mt-4">
               {PALETTE.map(p => (
                 <button
                   key={p.value}
                   type="button"
                   onClick={() => setColor(p.value)}
                   style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: '50%',
+                    width: 28, height: 28, borderRadius: '50%',
                     backgroundColor: p.value,
                     border: color === p.value ? '2px solid var(--text)' : '2px solid transparent',
-                    cursor: 'pointer',
-                    outline: 'none',
+                    cursor: 'pointer', outline: 'none',
                     boxShadow: color === p.value ? '0 0 4px rgba(255,255,255,0.4)' : 'none'
                   }}
                   title={p.name}
@@ -148,14 +117,12 @@ export default function CampaignsManager() {
             </div>
           </div>
 
-          {error && <div style={{ color: 'var(--danger)', fontSize: '0.78rem' }}>⚠️ {error}</div>}
-          {success && <div style={{ color: 'var(--success)', fontSize: '0.78rem' }}>✅ {success}</div>}
+          {error && <div className="text-danger text-sm">⚠️ {error}</div>}
+          {success && <div className="text-success text-sm">✅ {success}</div>}
 
-          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+          <div className="flex gap-8 mt-8">
             {editingCampaignId && (
-              <button type="button" className="btn" style={{ flex: 1, justifyContent: 'center' }} onClick={handleCancelEdit}>
-                Hủy
-              </button>
+              <button type="button" className="btn btn-flex" onClick={handleCancelEdit}>Hủy</button>
             )}
             <button type="submit" className="btn btn-primary" style={{ flex: 2, justifyContent: 'center' }}>
               {editingCampaignId ? 'Cập nhật' : 'Tạo chiến dịch'}
@@ -164,10 +131,9 @@ export default function CampaignsManager() {
         </form>
       </div>
 
-      {/* Campaigns List Column */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 600 }}>📋 Danh sách chiến dịch tiếp thị ({campaigns.length})</h3>
+      <div className="flex-col gap-16">
+        <div className="flex justify-between items-center">
+          <h3 className="text-md font-semibold">📋 Danh sách chiến dịch tiếp thị ({campaigns.length})</h3>
           <button className="btn btn-sm" onClick={handleRefresh} disabled={loading}>
             {loading ? '...' : 'Refresh'}
           </button>
@@ -178,32 +144,23 @@ export default function CampaignsManager() {
             <p>Chưa có chiến dịch nào. Tạo chiến dịch ở bảng bên trái để quản lý bài viết tốt hơn!</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+          <div className="flex-col gap-10">
             {campaigns.map(c => (
               <div
                 key={c.id}
-                style={{
-                  background: 'var(--bg-card)',
-                  border: '1px solid var(--border)',
-                  borderLeft: `4px solid ${c.color}`,
-                  borderRadius: 'var(--radius)',
-                  padding: '1rem',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: '1rem'
-                }}
+                className="card flex justify-between items-center"
+                style={{ borderLeft: `4px solid ${c.color}`, gap: '1rem' }}
               >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{c.title}</span>
+                <div className="flex-1" style={{ minWidth: 0 }}>
+                  <div className="flex items-center gap-8">
+                    <span className="text-md font-semibold text-secondary">{c.title}</span>
                   </div>
-                  {c.description && <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>{c.description}</div>}
+                  {c.description && <div className="text-sm text-muted" style={{ marginTop: '0.15rem' }}>{c.description}</div>}
                 </div>
-                
-                <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
+
+                <div className="flex gap-6 flex-shrink-0">
                   <button className="btn btn-sm" onClick={() => handleEdit(c)}>Sửa</button>
-                  <button className="btn btn-sm" style={{ color: 'var(--danger)', borderColor: 'transparent' }} onClick={() => handleDelete(c)}>Xóa</button>
+                  <button className="btn btn-sm text-danger" style={{ borderColor: 'transparent' }} onClick={() => handleDelete(c)}>Xóa</button>
                 </div>
               </div>
             ))}

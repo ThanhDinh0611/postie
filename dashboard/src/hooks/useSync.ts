@@ -3,7 +3,7 @@ import { useAuth } from '@clerk/clerk-react';
 import {
   getSyncStatus,
   syncAllPosts
-} from '../api.ts';
+} from '@/api/client.ts';
 
 export function useSync() {
   const { getToken } = useAuth();

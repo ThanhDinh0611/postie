@@ -5,9 +5,8 @@ import {
   oauthConnectPages,
   deletePage,
   selectActivePage,
-  getPageAnalysis,
   analyzePage
-} from '../api.ts';
+} from '@/api/client.ts';
 
 export function usePages() {
   const { getToken } = useAuth();
@@ -57,19 +56,6 @@ export function usePages() {
     }
   });
 
-  const usePageAnalysis = (pageId: string) => {
-    return useQuery({
-      queryKey: ['page-analysis', pageId],
-      queryFn: async () => {
-        if (!pageId) return null;
-        const token = await getToken();
-        if (!token) throw new Error('Not authenticated');
-        return getPageAnalysis(pageId, token);
-      },
-      enabled: !!pageId
-    });
-  };
-
   const analyzePageMutation = useMutation({
     mutationFn: async (pageId: string) => {
       const token = await getToken();
@@ -86,7 +72,6 @@ export function usePages() {
     connectPagesMutation,
     deletePageMutation,
     selectPageMutation,
-    usePageAnalysis,
     analyzePageMutation
   };
 }

@@ -49,6 +49,10 @@ export interface PostListParams {
   offset?: number;
 }
 
+function getFieldValues<T extends object>(obj: T, fields: (keyof T)[]): unknown[] {
+  return fields.map(f => obj[f] ?? null);
+}
+
 export class PostRepository {
   static async listPosts(db: D1Database, userId: string, params: PostListParams = {}): Promise<PostRow[]> {
     const { status, pageId, campaignId, sortBy = 'latest', limit = 20, offset = 0 } = params;
@@ -107,9 +111,9 @@ export class PostRepository {
       'id', 'page_id', 'facebook_post_id', 'permalink', 'message', 'media_url',
       'hook_type', 'copywriting_formula', 'tone', 'post_format', 'status',
       'scheduled_for', 'created_at', 'published_at', 'user_id', 'campaign_id', 'generation_id'
-    ];
+    ] as const satisfies (keyof PostRow)[];
     const placeholders = fields.map(() => '?').join(', ');
-    const binds = fields.map(f => (post as any)[f] ?? null);
+    const binds = getFieldValues(post, fields);
 
     await db
       .prepare(`INSERT INTO posts (${fields.join(', ')}) VALUES (${placeholders})`)
@@ -288,9 +292,9 @@ export class PostRepository {
     const fields = [
       'id', 'facebook_comment_id', 'post_id', 'from_name', 'from_id',
       'message', 'like_count', 'created_time', 'parent_id'
-    ];
+    ] as const satisfies (keyof CommentRow)[];
     const placeholders = fields.map(() => '?').join(', ');
-    const binds = fields.map(f => (comment as any)[f] ?? null);
+    const binds = getFieldValues(comment, fields);
 
     return db.prepare(`
       INSERT INTO post_comments (${fields.join(', ')}, fetched_at)
@@ -318,13 +322,14 @@ export class PostRepository {
     db: D1Database,
     post: Partial<PostRow> & { likes?: number; comments_count?: number; shares?: number; views?: number; engagement_fetched_at?: number }
   ): D1PreparedStatement {
-    const fields = [
+    const baseFields = [
       'id', 'page_id', 'facebook_post_id', 'permalink', 'message', 'media_url',
       'hook_type', 'copywriting_formula', 'tone', 'post_format', 'status',
       'scheduled_for', 'created_at', 'published_at', 'user_id', 'campaign_id', 'generation_id'
-    ];
+    ] as const satisfies (keyof PostRow)[];
+
+    const fields: (keyof PostRow)[] = [...baseFields];
     
-    // Optional metrics fields (for syncing fb posts directly)
     if (post.likes !== undefined) fields.push('likes');
     if (post.comments_count !== undefined) fields.push('comments_count');
     if (post.shares !== undefined) fields.push('shares');
@@ -332,7 +337,7 @@ export class PostRepository {
     if (post.engagement_fetched_at !== undefined) fields.push('engagement_fetched_at');
 
     const placeholders = fields.map(() => '?').join(', ');
-    const binds = fields.map(f => (post as any)[f] ?? null);
+    const binds = getFieldValues(post, fields);
 
     return db.prepare(`
       INSERT INTO posts (${fields.join(', ')}, last_synced_at)

@@ -1,4 +1,4 @@
-import type { PageData, CampaignData } from '../../api.ts';
+import type { PageData, CampaignData } from '@/api/types.ts';
 
 interface HistoryFiltersProps {
   pageFilter: string;
@@ -34,16 +34,15 @@ export default function HistoryFilters({
   syncing
 }: HistoryFiltersProps) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-        <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Danh sách bài đăng</h3>
+    <div className="flex justify-between items-center flex-wrap gap-12" style={{ marginBottom: '1.25rem' }}>
+      <div className="flex items-center gap-8">
+        <h3 className="text-base font-semibold text-secondary">Danh sách bài đăng</h3>
       </div>
 
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div className="flex items-center gap-8 flex-wrap">
         {/* Page Filter */}
         <select
-          className="form-control"
-          style={{ width: 'auto', fontSize: '0.82rem', padding: '0.3rem 0.5rem' }}
+          className="form-control form-control-sm"
           value={pageFilter}
           onChange={e => setPageFilter(e.target.value)}
         >
@@ -57,8 +56,7 @@ export default function HistoryFilters({
 
         {/* Campaign Filter */}
         <select
-          className="form-control"
-          style={{ width: 'auto', fontSize: '0.82rem', padding: '0.3rem 0.5rem' }}
+          className="form-control form-control-sm"
           value={campaignFilter}
           onChange={e => setCampaignFilter(e.target.value)}
         >
@@ -70,8 +68,7 @@ export default function HistoryFilters({
 
         {/* Status Filter */}
         <select
-          className="form-control"
-          style={{ width: 'auto', fontSize: '0.82rem', padding: '0.3rem 0.5rem' }}
+          className="form-control form-control-sm"
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
         >
@@ -84,8 +81,7 @@ export default function HistoryFilters({
 
         {/* Sorting Filter */}
         <select
-          className="form-control"
-          style={{ width: 'auto', fontSize: '0.82rem', padding: '0.3rem 0.5rem' }}
+          className="form-control form-control-sm"
           value={sortBy}
           onChange={e => setSortBy(e.target.value)}
         >

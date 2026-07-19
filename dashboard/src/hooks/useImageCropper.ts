@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { type Area } from 'react-easy-crop';
-import { compressImage, getCroppedImg } from '../utils/image.ts';
-import { useToast } from './useToast.tsx';
+import { compressImage, getCroppedImg } from '@/utils/image.ts';
+import { toErrorMessage } from '@/utils/errors.ts';
+import { useToast } from '@/hooks/useToast.tsx';
 
 export function useImageCropper(defaultAspect = 1) {
   const { addToast } = useToast();
@@ -46,7 +47,7 @@ export function useImageCropper(defaultAspect = 1) {
       handleCropCancel();
       return compressedFile;
     } catch (err) {
-      addToast('Lỗi cắt ảnh: ' + (err instanceof Error ? err.message : String(err)), 'error');
+      addToast('Lỗi cắt ảnh: ' + toErrorMessage(err), 'error');
       return null;
     } finally {
       setProcessing(false);

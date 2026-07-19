@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { PageData } from '../api.ts';
-import { useToast } from '../hooks/useToast.tsx';
+import type { PageData } from '@/api/types.ts';
+import { useToast } from '@/hooks/useToast.tsx';
 
 interface PublishModalProps {
   content: string;
@@ -45,30 +45,11 @@ export default function PublishModal({
 
   return (
     <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
-        padding: '1rem',
-      }}
+      className="modal-overlay"
       onClick={(e) => { if (e.target === e.currentTarget && !isPublishing) onCancel(); }}
     >
-      <div
-        className="modal-content"
-        style={{
-          margin: 'auto',
-          maxWidth: 540,
-          width: '100%',
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius)',
-          padding: '1.75rem',
-          display: 'flex', flexDirection: 'column', gap: '1.25rem',
-          boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5), 0 10px 10px -5px rgba(0,0,0,0.5)',
-        }}
-      >
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="modal-content">
+        <div className="flex justify-between items-center">
           <h3 style={{ fontSize: '1.15rem', fontWeight: 700 }}>📢 Xác nhận đăng bài</h3>
           {!isPublishing && (
             <button
@@ -84,69 +65,48 @@ export default function PublishModal({
           )}
         </div>
 
-        {/* Real-time progress display */}
         {isPublishing && (
-          <div style={{
-            background: 'var(--accent-light)', border: '1px solid var(--accent)',
-            borderRadius: 'var(--radius-sm)', padding: '0.75rem',
-            textAlign: 'center', fontSize: '0.88rem', color: 'var(--accent)',
-            fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem'
-          }}>
-            <span className="spinner-mini" style={{
-              display: 'inline-block', width: '12px', height: '12px',
-              border: '2px solid var(--accent)', borderTopColor: 'transparent',
-              borderRadius: '50%', animation: 'spin 0.8s linear infinite'
-            }} />
+          <div className="flex items-center justify-center gap-8 text-base font-semibold"
+            style={{
+              background: 'var(--accent-light)', border: '1px solid var(--accent)',
+              borderRadius: 'var(--radius-sm)', padding: '0.75rem',
+              color: 'var(--accent)',
+            }}>
+            <span className="spinner-mini" />
             {publishProgress || '⏳ Đang xử lý đăng bài...'}
           </div>
         )}
 
-        {/* Page info */}
-        <div
-          style={{
-            background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)', padding: '0.75rem 1rem', fontSize: '0.85rem',
-          }}
-        >
-          <span style={{ color: 'var(--text-muted)' }}>Đăng lên: </span>
+        <div className="card-sm text-base">
+          <span className="text-muted">Đăng lên: </span>
           <strong>{selectedPage?.name ?? 'Chưa chọn trang'}</strong>
           {selectedPage?.username && (
-            <span style={{ color: 'var(--text-muted)' }}> (@{selectedPage.username})</span>
+            <span className="text-muted"> (@{selectedPage.username})</span>
           )}
         </div>
 
-        {/* Content preview */}
         <div>
-          <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem' }}>
+          <label className="text-sm font-semibold text-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>
             NỘI DUNG SẼ ĐĂNG
           </label>
-          <div
-            style={{
-              background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)', padding: '0.75rem', fontSize: '0.85rem',
-              whiteSpace: 'pre-wrap', color: 'var(--text-secondary)',
-              maxHeight: '150px', overflowY: 'auto', lineHeight: 1.5,
-            }}
-          >
+          <div className="card-sm text-base" style={{ whiteSpace: 'pre-wrap', color: 'var(--text-secondary)', maxHeight: '150px', overflowY: 'auto', lineHeight: 1.5 }}>
             {content}
           </div>
         </div>
 
-        {/* Image preview */}
         {mediaUrl && (
           <div>
-            <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem' }}>
+            <label className="text-sm font-semibold text-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>
               HÌNH ẢNH ĐÍNH KÈM
             </label>
-            <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.5rem', display: 'flex', justifyContent: 'center' }}>
-              <img src={mediaUrl} alt="Preview" style={{ maxWidth: '100%', maxHeight: '140px', objectFit: 'contain', borderRadius: 4 }} />
+            <div className="card-sm flex justify-center" style={{ padding: '0.5rem' }}>
+              <img src={mediaUrl} alt="Preview" loading="lazy" style={{ maxWidth: '100%', maxHeight: '140px', objectFit: 'contain', borderRadius: 4 }} />
             </div>
           </div>
         )}
 
-        {/* Schedule option */}
         <div>
-          <label style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+          <label className="text-base font-medium text-secondary flex items-center gap-8" style={{ marginBottom: '0.5rem' }}>
             <input
               type="checkbox"
               checked={isScheduled}
@@ -159,42 +119,33 @@ export default function PublishModal({
             📅 Lên lịch đăng sau
           </label>
           {isScheduled && (
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
-              <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-                <label htmlFor="scheduleDate" style={{ fontSize: '0.78rem' }}>Ngày</label>
-                <input
-                  id="scheduleDate" type="date" className="form-control"
+            <div className="flex gap-12">
+              <div className="form-group mb-0 flex-1">
+                <label htmlFor="scheduleDate" className="text-sm">Ngày</label>
+                <input id="scheduleDate" type="date" className="form-control"
                   value={scheduleDate}
                   onChange={(e) => setScheduleDate(e.target.value)}
                   min={new Date().toISOString().split('T')[0]}
-                  disabled={isPublishing}
-                />
+                  disabled={isPublishing} />
               </div>
-              <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-                <label htmlFor="scheduleTime" style={{ fontSize: '0.78rem' }}>Giờ</label>
-                <input
-                  id="scheduleTime" type="time" className="form-control"
+              <div className="form-group mb-0 flex-1">
+                <label htmlFor="scheduleTime" className="text-sm">Giờ</label>
+                <input id="scheduleTime" type="time" className="form-control"
                   value={scheduleTime}
                   onChange={(e) => setScheduleTime(e.target.value)}
-                  disabled={isPublishing}
-                />
+                  disabled={isPublishing} />
               </div>
             </div>
           )}
         </div>
 
-        {/* Actions */}
-        <div style={{ display: 'flex', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
-          <button
-            className="btn" style={{ flex: 1, justifyContent: 'center', padding: '0.75rem' }}
-            onClick={onCancel} disabled={isPublishing}
-          >
+        <div className="flex gap-12" style={{ paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
+          <button className="btn btn-flex" style={{ padding: '0.75rem' }}
+            onClick={onCancel} disabled={isPublishing}>
             Huỷ
           </button>
-          <button
-            className="btn btn-primary" style={{ flex: 1, justifyContent: 'center', padding: '0.75rem' }}
-            onClick={handleConfirm} disabled={isPublishing}
-          >
+          <button className="btn btn-primary btn-flex" style={{ padding: '0.75rem' }}
+            onClick={handleConfirm} disabled={isPublishing}>
             {isPublishing
               ? '⏳ Đang đăng...'
               : isScheduled

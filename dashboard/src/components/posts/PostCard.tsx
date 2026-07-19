@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import type { PostData } from '../../api.ts';
-import { usePosts } from '../../hooks/usePosts.ts';
-import { useToast } from '../../hooks/useToast.tsx';
-import CommentsSection from './CommentsSection.tsx';
+import type { PostData } from '@/api/types.ts';
+import { usePosts } from '@/hooks/usePosts.ts';
+import { useToast } from '@/hooks/useToast.tsx';
+import { toErrorMessage } from '@/utils/errors.ts';
+import CommentsSection from '@/components/posts/CommentsSection.tsx';
 
 interface PostCardProps {
   post: PostData;
@@ -35,7 +36,7 @@ export default function PostCard({ post, onRefresh }: PostCardProps) {
       addToast('Đã xóa bài viết thành công!', 'success');
       if (onRefresh) onRefresh();
     } catch (err) {
-      addToast(`Lỗi xóa bài viết: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      addToast(`Lỗi xóa bài viết: ${toErrorMessage(err)}`, 'error');
     }
   };
 
@@ -58,7 +59,7 @@ export default function PostCard({ post, onRefresh }: PostCardProps) {
     const bgColors: Record<string, string> = { Published: 'rgba(34,197,94,0.12)', Scheduled: 'rgba(245,158,11,0.12)', Draft: 'rgba(100,116,139,0.12)', Failed: 'rgba(239,68,68,0.12)' };
     const labels: Record<string, string> = { Published: 'Đã đăng', Scheduled: 'Lên lịch', Draft: 'Bản nháp', Failed: 'Lỗi' };
     return (
-      <span style={{ display: 'inline-block', padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 600, color: colors[status] ?? '#64748b', background: bgColors[status] ?? 'rgba(100,116,139,0.12)' }}>
+      <span className="badge" style={{ color: colors[status] ?? '#64748b', background: bgColors[status] ?? 'rgba(100,116,139,0.12)' }}>
         {labels[status] ?? status}
       </span>
     );
@@ -67,14 +68,14 @@ export default function PostCard({ post, onRefresh }: PostCardProps) {
   const isDeleting = deletePostMutation.isPending;
 
   return (
-    <div className="link-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.6rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+    <div className="link-item flex-col items-stretch gap-10">
+      <div className="flex justify-between items-start gap-12">
+        <div className="flex-1" style={{ minWidth: 0 }}>
           <div className="link-message" style={{ whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: '1.5' }}>
             {post.message}
           </div>
         </div>
-        <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
+        <div className="flex-shrink-0 flex-col items-end gap-6" style={{ display: 'flex' }}>
           {getStatusBadge(post.status)}
           {post.post_format && post.post_format !== 'Post' ? (
             <span className="badge" style={{ backgroundColor: 'rgba(168,85,247,0.12)', color: '#a855f7' }}>
@@ -84,10 +85,9 @@ export default function PostCard({ post, onRefresh }: PostCardProps) {
         </div>
       </div>
 
-      {/* Campaign & Engagement Metrics Footer */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem', borderTop: '1px solid var(--border)', paddingTop: '0.6rem', marginTop: '0.2rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <span style={{ color: 'var(--text-muted)' }}>
+      <div className="flex justify-between items-center font-semibold text-sm" style={{ borderTop: '1px solid var(--border)', paddingTop: '0.6rem', marginTop: '0.2rem', flexWrap: 'wrap', gap: '0.5rem', color: 'var(--text-secondary)' }}>
+        <div className="flex items-center gap-8 flex-wrap">
+          <span className="text-muted font-medium">
             {post.page_name ?? 'Unknown'} - {formatDate(post.published_at ?? post.created_at)}
           </span>
           {post.campaign_title && (
@@ -97,18 +97,17 @@ export default function PostCard({ post, onRefresh }: PostCardProps) {
           )}
         </div>
 
-        {/* Likes, Comments, Shares, Views */}
         {post.status === 'Published' && (
-          <div style={{ display: 'flex', gap: '0.75rem', fontWeight: 500, color: 'var(--text-secondary)' }}>
+          <div className="flex gap-12 font-medium text-secondary">
             <span title="Lượt thích">❤️ {formatNumber(post.likes)}</span>
             <span title="Bình luận">💬 {formatNumber(post.comments_count)}</span>
             <span title="Chia sẻ">🔁 {formatNumber(post.shares)}</span>
-            <span title="Lượt xem" style={{ color: 'var(--text-muted)' }}>👁️ {formatNumber(post.views)}</span>
+            <span title="Lượt xem" className="text-muted">👁️ {formatNumber(post.views)}</span>
           </div>
         )}
 
         {post.permalink ? (
-          <div style={{ display: 'flex', gap: '0.4rem' }}>
+          <div className="flex gap-6">
             <button className="btn btn-sm" onClick={handleCopyLink}
               style={copyFeedback ? { borderColor: 'var(--success)' } : {}}>
               {copyFeedback ? 'Copied!' : 'Copy'}
@@ -127,7 +126,7 @@ export default function PostCard({ post, onRefresh }: PostCardProps) {
               className="btn btn-sm"
               onClick={handleDelete}
               disabled={isDeleting}
-              style={{ color: '#ef4444', borderColor: '#ef4444', opacity: isDeleting ? 0.6 : 1, cursor: isDeleting ? 'not-allowed' : 'pointer' }}
+              style={{ color: 'var(--danger)', borderColor: 'var(--danger)', opacity: isDeleting ? 0.6 : 1, cursor: isDeleting ? 'not-allowed' : 'pointer' }}
             >
               {isDeleting ? '⏳ Đang xóa...' : '🗑️ Xóa'}
             </button>
@@ -135,7 +134,6 @@ export default function PostCard({ post, onRefresh }: PostCardProps) {
         ) : null}
       </div>
 
-      {/* Expanded Comments Section */}
       {expanded && (
         <CommentsSection postId={post.id} onClose={() => setExpanded(false)} />
       )}

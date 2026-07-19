@@ -5,7 +5,7 @@ import {
   createCampaign,
   updateCampaign,
   deleteCampaign
-} from '../api.ts';
+} from '@/api/client.ts';
 
 export function useCampaigns() {
   const { getToken } = useAuth();

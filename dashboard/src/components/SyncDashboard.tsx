@@ -1,127 +1,103 @@
-import { useState, useEffect } from 'react';
-import { useSync } from '../hooks/useSync.ts';
-import { usePages } from '../hooks/usePages.ts';
-import { formatDate, formatNumber } from '../utils/formatters.ts';
-import MetricCard from './analytics/MetricCard.tsx';
-import CSSChart from './analytics/CSSChart.tsx';
-import SyncLog from './analytics/SyncLog.tsx';
-import type { SyncResponse } from '../api.ts';
+import { useState, useEffect, useMemo } from 'react';
+import { useSync } from '@/hooks/useSync.ts';
+import { usePages } from '@/hooks/usePages.ts';
+import { usePageAnalysis } from '@/hooks/usePageAnalysis.ts';
+import { useToast } from '@/hooks/useToast.tsx';
+import MetricCard from '@/components/analytics/MetricCard.tsx';
+import CSSChart from '@/components/analytics/CSSChart.tsx';
+import SyncLog from '@/components/analytics/SyncLog.tsx';
+import { formatNumber, formatDate } from '@/utils/formatters.ts';
+import { toErrorMessage } from '@/utils/errors.ts';
 
-// ─── Helper functions ────────────────────────────────────────────────────────
 
-function renderMarkdown(text: string) {
+function renderMarkdown(text: string): React.ReactNode {
   if (!text) return null;
-  // Convert headers: ### header -> <h4>header</h4>
-  let html = text.replace(/### (.*?)(?:\n|$)/g, '<h4>$1</h4>');
-  html = html.replace(/## (.*?)(?:\n|$)/g, '<h4>$1</h4>');
-  // Convert bold: **text** -> <strong>text</strong>
-  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  // Convert bullet points: - item -> <li>item</li>
-  html = html.replace(/(?:^|\n)-\s(.*?)(?=\n|$)/g, '\n<li>$1</li>');
-  // Wrap contiguous <li> blocks in <ul>
-  html = html.replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>');
-  // Fix duplicate <ul><ul>
-  html = html.replace(/<\/ul>\s*<ul>/g, '');
-  
-  const paragraphs = html.split('\n\n').map(p => {
-    const trimmed = p.trim();
-    if (trimmed.startsWith('<h') || trimmed.startsWith('<ul') || trimmed.startsWith('<li>')) return p;
-    return `<p>${p.replace(/\n/g, '<br />')}</p>`;
-  });
-  
-  return <div className="markdown-content" dangerouslySetInnerHTML={{ __html: paragraphs.join('') }} />;
+  const lines = text.split('\n').filter(Boolean);
+  return (
+    <div className="insights-markdown">
+      {lines.map((line, i) => {
+        if (line.startsWith('## ')) return <h4 key={i} className="text-secondary" style={{ marginTop: i > 0 ? '0.75rem' : 0 }}>{line.slice(3)}</h4>;
+        if (line.startsWith('**') && line.endsWith('**')) return <p key={i} className="font-semibold text-secondary" style={{ marginTop: '0.5rem' }}>{line.slice(2, -2)}</p>;
+        if (line.startsWith('- ')) return <li key={i} className="text-secondary text-base" style={{ marginLeft: '1rem' }}>{line.slice(2)}</li>;
+        return <p key={i} className="text-secondary text-base">{line}</p>;
+      })}
+    </div>
+  );
 }
 
 export default function SyncDashboard() {
   const { syncStatusQuery, syncAllPostsMutation } = useSync();
-  const { usePageAnalysis, analyzePageMutation } = usePages();
-
-  const [syncResult, setSyncResult] = useState<SyncResponse | null>(null);
+  const { analyzePageMutation } = usePages();
+  const { addToast } = useToast();
   const [selectedPageId, setSelectedPageId] = useState<string>('');
-  const [completedSuggestions, setCompletedSuggestions] = useState<Record<string, boolean>>({});
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [syncResult, setSyncResult] = useState<Awaited<ReturnType<typeof syncAllPostsMutation.mutateAsync>> | null>(null);
+  const [error, setError] = useState('');
+  const [completedSuggestions, setCompletedSuggestions] = useState<Record<number, boolean>>({});
 
-  const status = syncStatusQuery.data;
+  const status = syncStatusQuery.data ?? null;
 
-  // Sync Analysis query based on selectedPageId
-  const { data: analysis, isLoading: isAnalysisLoading } = usePageAnalysis(selectedPageId);
-
-  // Set default page ID on status load
   useEffect(() => {
     if (status?.pages && status.pages.length > 0 && !selectedPageId) {
-      setSelectedPageId(status.pages[0]!.id);
+      if (status.pages[0]) setSelectedPageId(status.pages[0].id);
     }
   }, [status, selectedPageId]);
 
-  // Load checked suggestions from local storage
-  useEffect(() => {
-    if (selectedPageId) {
-      const stored = localStorage.getItem(`suggestions_completed_${selectedPageId}`);
-      if (stored) {
-        try { setCompletedSuggestions(JSON.parse(stored)); } catch { /* ignore */ }
-      } else {
-        setCompletedSuggestions({});
-      }
-    }
-  }, [selectedPageId]);
+  const analysisData = usePageAnalysis(selectedPageId);
+  const analysis = analysisData?.data ?? null;
+  const isAnalysisLoading = analysisData?.isFetching ?? false;
 
-  const handleSync = async () => {
-    setError(null);
-    setProgress(10);
-    try {
-      setProgress(40);
-      const result = await syncAllPostsMutation.mutateAsync(selectedPageId);
-      setProgress(100);
-      setSyncResult(result);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sync failed');
-    } finally {
-      setProgress(0);
-    }
-  };
+  const progress = useMemo(() => {
+    if (!status?.totalPosts) return 0;
+    return Math.min(100, Math.round((status.totalPosts / 200) * 100));
+  }, [status]);
 
-  const handleRunAudit = async () => {
-    if (!selectedPageId) return;
-    setError(null);
-    try {
-      await analyzePageMutation.mutateAsync(selectedPageId);
-      localStorage.setItem(`suggestions_completed_${selectedPageId}`, '{}');
-      setCompletedSuggestions({});
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'AI Page Audit failed');
-    }
-  };
-
-  const toggleSuggestion = (index: number) => {
-    const next = { ...completedSuggestions, [index]: !completedSuggestions[index] };
-    setCompletedSuggestions(next);
-    if (selectedPageId) {
-      localStorage.setItem(`suggestions_completed_${selectedPageId}`, JSON.stringify(next));
-    }
-  };
+  const isSyncing = syncAllPostsMutation.isPending;
+  const isAnalyzing = analyzePageMutation.isPending;
 
   const handlePageChange = (pageId: string) => {
     setSelectedPageId(pageId);
   };
 
-  const isSyncing = syncAllPostsMutation.isPending;
-  const isAnalyzing = analyzePageMutation.isPending;
+  const handleSync = async () => {
+    setError('');
+    if (!selectedPageId) {
+      addToast('Vui lòng chọn một trang để đồng bộ.', 'warning');
+      return;
+    }
+    try {
+      const result = await syncAllPostsMutation.mutateAsync(selectedPageId);
+      setSyncResult(result);
+    } catch (err) {
+      setError(toErrorMessage(err, 'Sync failed'));
+    }
+  };
+
+  const handleRunAudit = async () => {
+    if (!selectedPageId) return;
+    try {
+      await analyzePageMutation.mutateAsync(selectedPageId);
+    } catch (err) {
+      addToast('Không thể chạy AI Page Audit', 'error');
+    }
+  };
+
+  const toggleSuggestion = (idx: number) => {
+    setCompletedSuggestions(prev => ({ ...prev, [idx]: !prev[idx] }));
+  };
 
   const eng = status?.engagement;
   const totalEng = (eng?.totalLikes ?? 0) + (eng?.totalComments ?? 0) + (eng?.totalShares ?? 0) + (eng?.totalViews ?? 0);
 
   return (
     <div className="sync-dashboard">
-      {/* Upper header controls */}
       <div className="sync-header">
         <div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>📊 Phân tích & Chiến lược Trang</h2>
-          <p className="text-muted" style={{ fontSize: '0.88rem' }}>Đồng bộ số liệu Facebook Fanpage và chạy kiểm toán thương hiệu bằng AI.</p>
+          <h2 className="text-xl font-bold" style={{ marginBottom: '0.25rem' }}>📊 Phân tích & Chiến lược Trang</h2>
+          <p className="text-muted text-base">Đồng bộ số liệu Facebook Fanpage và chạy kiểm toán thương hiệu bằng AI.</p>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="flex gap-12 items-center flex-wrap">
           {status?.lastSyncAt && (
-            <span className="text-muted" style={{ fontSize: '0.78rem', marginRight: '0.5rem' }}>
+            <span className="text-muted text-sm" style={{ marginRight: '0.5rem' }}>
               Đồng bộ lần cuối: {formatDate(status.lastSyncAt)}
             </span>
           )}
@@ -164,7 +140,6 @@ export default function SyncDashboard() {
         </div>
       )}
 
-      {/* Aggregate Metrics cards */}
       {status && (
         <div className="metrics-grid">
           <MetricCard label="Tổng bài đăng" value={status.totalPosts} icon="📝" color="#f59e0b" sub={status.pageCount + ' trang kết nối'} />
@@ -176,7 +151,6 @@ export default function SyncDashboard() {
         </div>
       )}
 
-      {/* AI Page Analysis Strategic Section */}
       {isAnalyzing || isAnalysisLoading ? (
         <div className="skeleton-container">
           <div className="skeleton-box">
@@ -185,15 +159,14 @@ export default function SyncDashboard() {
             <div className="skeleton-bar w-75"></div>
             <div className="skeleton-bar w-50"></div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div className="flex" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div className="skeleton-box" style={{ height: 160 }}></div>
             <div className="skeleton-box" style={{ height: 160 }}></div>
           </div>
         </div>
       ) : analysis ? (
         <div className="insights-grid">
-          {/* Left Column: Report & Writing style */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div className="flex-col gap-24">
             <div className="insights-card">
               <h3><span>📋</span> Báo Cáo Kiểm Toán Chiến Lược AI</h3>
               {renderMarkdown(analysis.summary)}
@@ -210,12 +183,11 @@ export default function SyncDashboard() {
             </div>
           </div>
 
-          {/* Right Column: Suggestions checklist & CSS charts */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div className="flex-col gap-24">
             <div className="insights-card">
               <h3><span>💡</span> Gợi Ý Cải Thiện Fanpage</h3>
               <div className="suggestions-list">
-                {analysis.suggestions.map((s, idx) => {
+                {(analysis.suggestions ?? []).map((s, idx) => {
                   const isCompleted = !!completedSuggestions[idx];
                   return (
                     <div
@@ -229,7 +201,7 @@ export default function SyncDashboard() {
                       <div className="suggestion-content">
                         <div className="suggestion-title-row">
                           <span className="suggestion-title">{s.title}</span>
-                          <span className={`priority-badge priority-${s.priority.toLowerCase()}`}>{s.priority}</span>
+                          <span className={`priority-badge priority-${(s.priority ?? 'medium').toLowerCase()}`}>{s.priority}</span>
                         </div>
                         <span className="suggestion-desc">{s.description}</span>
                       </div>
@@ -241,22 +213,22 @@ export default function SyncDashboard() {
 
             <div className="insights-card">
               <h3><span>📊</span> Biểu Đồ Hiệu Suất</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div className="flex-col gap-20">
                 <CSSChart
                   title="Tỷ lệ tương tác theo công thức viết bài (ER %)"
-                  data={analysis.chartsData.engagementByFormula.map(f => ({ label: f.formula, value: f.avgEngagementRate }))}
+                  data={(analysis.chartsData?.engagementByFormula ?? []).map(f => ({ label: f.formula, value: f.avgEngagementRate }))}
                 />
                 <CSSChart
                   title="Tỷ lệ tương tác theo loại Hook (ER %)"
-                  data={analysis.chartsData.engagementByHook.map(h => ({ label: h.hook, value: h.avgEngagementRate }))}
+                  data={(analysis.chartsData?.engagementByHook ?? []).map(h => ({ label: h.hook, value: h.avgEngagementRate }))}
                 />
                 <CSSChart
                   title="Tỷ lệ tương tác theo định dạng (ER %)"
-                  data={analysis.chartsData.engagementByFormat.map(f => ({ label: f.format, value: f.avgEngagementRate }))}
+                  data={(analysis.chartsData?.engagementByFormat ?? []).map(f => ({ label: f.format, value: f.avgEngagementRate }))}
                 />
                 <CSSChart
                   title="Số lượng bài viết theo tháng"
-                  data={analysis.chartsData.postVolumeByMonth.map(m => ({ label: m.month, value: m.postCount }))}
+                  data={(analysis.chartsData?.postVolumeByMonth ?? []).map(m => ({ label: m.month, value: m.postCount }))}
                   valueSuffix=" bài"
                 />
               </div>
@@ -264,7 +236,7 @@ export default function SyncDashboard() {
           </div>
         </div>
       ) : selectedPageId ? (
-        <div className="placeholder-card" style={{ padding: '3rem 2rem' }}>
+        <div className="placeholder-card text-center" style={{ padding: '3rem 2rem' }}>
           <span style={{ fontSize: '2.5rem', display: 'block', marginBottom: '1rem' }}>🔮</span>
           <h3>Chưa có phân tích chiến lược cho trang này</h3>
           <p className="text-muted" style={{ margin: '0.5rem auto 1.5rem', maxWidth: '480px' }}>
@@ -276,11 +248,10 @@ export default function SyncDashboard() {
         </div>
       ) : null}
 
-      {/* Bottom Synced Post Log */}
-      <div className="sync-section" style={{ marginTop: '1rem' }}>
-        <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <div className="sync-section mt-16">
+        <h3 className="text-lg font-semibold flex items-center gap-8" style={{ marginBottom: '1rem' }}>
           <span>📋</span> Danh sách bài đăng đồng bộ
-          {syncResult?.results && <span className="text-muted" style={{ fontWeight: 400, fontSize: '0.85rem', marginLeft: '0.5rem' }}>({syncResult.results.length} bài đăng gần nhất)</span>}
+          {syncResult?.results && <span className="text-muted font-medium text-base" style={{ marginLeft: '0.5rem' }}>({syncResult.results.length} bài đăng gần nhất)</span>}
         </h3>
         <SyncLog results={syncResult?.results ?? []} stats={syncResult?.stats ?? { totalPosts: 0, totalLikes: 0, totalComments: 0, totalShares: 0, totalViews: 0, avgLikes: 0, avgComments: 0, avgShares: 0, avgViews: 0 }} />
       </div>
