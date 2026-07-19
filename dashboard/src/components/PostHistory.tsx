@@ -13,12 +13,13 @@ export default function PostHistory() {
   const [pageFilter, setPageFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [campaignFilter, setCampaignFilter] = useState('all');
+  const [formatFilter, setFormatFilter] = useState('all');
   const [sortBy, setSortBy] = useState('latest');
   const [offset, setOffset] = useState(0);
   const [allPosts, setAllPosts] = useState<PostData[]>([]);
   const prevFiltersKey = useRef('');
 
-  const filtersKey = JSON.stringify({ pageFilter, statusFilter, campaignFilter, sortBy });
+  const filtersKey = JSON.stringify({ pageFilter, statusFilter, campaignFilter, formatFilter, sortBy });
 
   useEffect(() => {
     if (prevFiltersKey.current && prevFiltersKey.current !== filtersKey) {
@@ -48,6 +49,7 @@ export default function PostHistory() {
     pageId: pageFilter === 'all' ? undefined : pageFilter,
     status: statusFilter === 'all' ? undefined : statusFilter,
     campaignId: campaignFilter === 'all' ? undefined : campaignFilter,
+    format: formatFilter === 'all' ? undefined : formatFilter,
     sortBy: sortBy,
     offset,
     limit: PAGE_SIZE
@@ -104,6 +106,8 @@ export default function PostHistory() {
         setCampaignFilter={handleFilterChange(setCampaignFilter)}
         statusFilter={statusFilter}
         setStatusFilter={handleFilterChange(setStatusFilter)}
+        formatFilter={formatFilter}
+        setFormatFilter={handleFilterChange(setFormatFilter)}
         sortBy={sortBy}
         setSortBy={handleFilterChange(setSortBy)}
         pages={pages}

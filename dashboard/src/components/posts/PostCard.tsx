@@ -80,6 +80,7 @@ export default function PostCard({ post, onRefresh }: PostCardProps) {
           {post.post_format && post.post_format !== 'Post' ? (
             <span className="badge" style={{ backgroundColor: 'rgba(168,85,247,0.12)', color: '#a855f7' }}>
               {post.post_format}
+              {post.reel_duration ? ` ${post.reel_duration}s` : ''}
             </span>
           ) : null}
         </div>

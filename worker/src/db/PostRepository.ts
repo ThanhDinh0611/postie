@@ -22,6 +22,9 @@ export interface PostRow {
   views: number;
   engagement_fetched_at: number | null;
   last_synced_at: number | null;
+  reel_duration: number | null;
+  video_url: string | null;
+  script_segments: string | null;
   page_name?: string;
   campaign_title?: string;
   campaign_color?: string;
@@ -44,6 +47,7 @@ export interface PostListParams {
   status?: string;
   pageId?: string;
   campaignId?: string;
+  format?: string;
   sortBy?: string;
   limit?: number;
   offset?: number;
@@ -55,7 +59,7 @@ function getFieldValues<T extends object>(obj: T, fields: (keyof T)[]): unknown[
 
 export class PostRepository {
   static async listPosts(db: D1Database, userId: string, params: PostListParams = {}): Promise<PostRow[]> {
-    const { status, pageId, campaignId, sortBy = 'latest', limit = 20, offset = 0 } = params;
+    const { status, pageId, campaignId, format, sortBy = 'latest', limit = 20, offset = 0 } = params;
     
     let query = `
       SELECT p.*, pg.name as page_name, cmp.title as campaign_title, cmp.color as campaign_color 
@@ -77,6 +81,10 @@ export class PostRepository {
     if (campaignId) {
       query += ' AND p.campaign_id = ?';
       binds.push(campaignId);
+    }
+    if (format) {
+      query += ' AND p.post_format = ?';
+      binds.push(format);
     }
 
     let orderBy = 'p.created_at DESC';
@@ -110,7 +118,8 @@ export class PostRepository {
     const fields = [
       'id', 'page_id', 'facebook_post_id', 'permalink', 'message', 'media_url',
       'hook_type', 'copywriting_formula', 'tone', 'post_format', 'status',
-      'scheduled_for', 'created_at', 'published_at', 'user_id', 'campaign_id', 'generation_id'
+      'scheduled_for', 'created_at', 'published_at', 'user_id', 'campaign_id', 'generation_id',
+      'reel_duration', 'video_url', 'script_segments'
     ] as const satisfies (keyof PostRow)[];
     const placeholders = fields.map(() => '?').join(', ');
     const binds = getFieldValues(post, fields);
@@ -325,7 +334,8 @@ export class PostRepository {
     const baseFields = [
       'id', 'page_id', 'facebook_post_id', 'permalink', 'message', 'media_url',
       'hook_type', 'copywriting_formula', 'tone', 'post_format', 'status',
-      'scheduled_for', 'created_at', 'published_at', 'user_id', 'campaign_id', 'generation_id'
+      'scheduled_for', 'created_at', 'published_at', 'user_id', 'campaign_id', 'generation_id',
+      'reel_duration', 'video_url', 'script_segments'
     ] as const satisfies (keyof PostRow)[];
 
     const fields: (keyof PostRow)[] = [...baseFields];

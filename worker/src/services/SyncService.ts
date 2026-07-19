@@ -121,13 +121,21 @@ export class SyncService {
         postId = crypto.randomUUID();
         const pubAt = p.created_time ? Math.floor(new Date(p.created_time).getTime() / 1000) : null;
         
+        // Detect post format from Facebook attachment type
+        let postFormat = 'Post';
+        if (p.attachments?.data?.[0]?.type) {
+          const attType = p.attachments.data[0].type;
+          if (attType === 'video_inline') postFormat = 'Reel';
+          else if (attType === 'video') postFormat = 'Video';
+        }
+
         statements.push(PostRepository.getInsertPostStatement(db, {
           id: postId,
           page_id: page.id,
           facebook_post_id: p.id,
           permalink: p.permalink_url ?? null,
           message: p.message ?? '',
-          post_format: 'Post',
+          post_format: postFormat,
           status: 'Published',
           created_at: pubAt ?? Math.floor(Date.now() / 1000),
           published_at: pubAt,

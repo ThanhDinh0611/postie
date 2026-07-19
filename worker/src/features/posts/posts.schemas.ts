@@ -26,6 +26,21 @@ export const generatePostSchema = z.object({
   publishType: z.enum(['image', 'link']).optional(),
   wikiSlug: z.string().optional(),
   allowWebSearch: z.boolean().optional(),
+  reelDuration: z.number().int().positive().optional(),
+});
+
+export const publishReelSchema = z.object({
+  videoUrl: z.string().url('videoUrl must be a valid URL'),
+  caption: z.string().min(1, 'caption is required'),
+  pageId: z.string().optional(),
+  scheduledAt: z.number().int().positive().nullable().optional(),
+  reelDuration: z.number().int().positive().optional(),
+  scriptSegments: z.string().optional(),
+  hookType: z.string().optional(),
+  formula: z.string().optional(),
+  tone: z.string().optional(),
+  campaignId: z.string().optional(),
+  generationId: z.string().optional(),
 });
 
 export const createCommentSchema = z.object({

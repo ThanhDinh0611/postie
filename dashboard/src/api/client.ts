@@ -8,6 +8,9 @@ import type {
   PublishRequest,
   PublishResponse,
   UploadResponse,
+  VideoUploadResponse,
+  PublishReelRequest,
+  PublishReelResponse,
   SyncResponse,
   SyncStatusResponse,
   PostEngagementResponse,
@@ -71,12 +74,13 @@ export async function publishPost(request: PublishRequest, token: string): Promi
 
 export async function getPosts(
   token: string,
-  params?: { status?: string; pageId?: string; campaignId?: string; sortBy?: string; offset?: number; limit?: number }
+  params?: { status?: string; pageId?: string; campaignId?: string; format?: string; sortBy?: string; offset?: number; limit?: number }
 ): Promise<PostData[]> {
   const searchParams = new URLSearchParams();
   if (params?.status) searchParams.set('status', params.status);
   if (params?.pageId) searchParams.set('pageId', params.pageId);
   if (params?.campaignId) searchParams.set('campaignId', params.campaignId);
+  if (params?.format) searchParams.set('format', params.format);
   if (params?.sortBy) searchParams.set('sortBy', params.sortBy);
   if (params?.offset) searchParams.set('offset', String(params.offset));
   if (params?.limit) searchParams.set('limit', String(params.limit));
@@ -102,6 +106,22 @@ export async function uploadImage(file: File, token: string): Promise<UploadResp
 
 export async function getMedia(token: string): Promise<{ fileName: string; url: string }[]> {
   return fetchJson(`${API_BASE}/api/media`, { headers: authHeaders(token) });
+}
+
+export async function uploadVideo(file: File, token: string): Promise<VideoUploadResponse> {
+  const form = new FormData();
+  form.append('video', file);
+  return fetchJson<VideoUploadResponse>(`${API_BASE}/api/media/upload-video`, {
+    method: 'POST', headers: authHeaders(token), body: form,
+  });
+}
+
+export async function publishReelPost(request: PublishReelRequest, token: string): Promise<PublishReelResponse> {
+  return fetchJson<PublishReelResponse>(`${API_BASE}/api/posts/publish-reel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+    body: JSON.stringify(request),
+  });
 }
 
 // ─── Auth API ────────────────────────────────────────────────────────────────

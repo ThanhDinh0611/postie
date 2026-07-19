@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { getUserIdFromRequest, authorizeFeature } from '../../core/auth.ts';
 import { generatePostContent, generateCommentContent } from '../../core/ai.ts';
-import { publishPost, buildPermalink, clearFacebookCache, createPostComment, deleteFacebookPost, deleteFacebookComment } from '../../core/facebook.ts';
+import { publishPost, publishReel, buildPermalink, clearFacebookCache, createPostComment, deleteFacebookPost, deleteFacebookComment } from '../../core/facebook.ts';
 import { PageRepository } from '../../db/PageRepository.ts';
 import { PostRepository } from '../../db/PostRepository.ts';
 import { ClipyService } from '../../services/ClipyService.ts';
@@ -10,7 +10,8 @@ import {
   publishPostSchema,
   generatePostSchema,
   createCommentSchema,
-  generateCommentSchema
+  generateCommentSchema,
+  publishReelSchema
 } from './posts.schemas.ts';
 
 export const postsRouter = new Hono<{ Bindings: Env }>();
@@ -89,17 +90,83 @@ postsRouter.post('/posts/publish', zValidator('json', publishPostSchema), async 
   }
 });
 
+// POST /api/posts/publish-reel — Publish a Reel to Facebook
+postsRouter.post('/posts/publish-reel', zValidator('json', publishReelSchema), async (c) => {
+  const userId = await getUserIdFromRequest(c.req.raw, c.env);
+  if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+
+  const authResult = await authorizeFeature(userId, 'maxPostsPerMonth', c.env, c.req.raw);
+  if (!authResult.authorized) return c.json({ error: authResult.reason }, 403);
+
+  const body = c.req.valid('json');
+
+  // Check tier allows Reels
+  const tierResult = await authorizeFeature(userId, 'allowReels', c.env, c.req.raw);
+  if (!tierResult.authorized) return c.json({ error: tierResult.reason }, 403);
+
+  let page;
+  if (body.pageId) {
+    page = await PageRepository.findPageByIdAndUser(c.env.DB, body.pageId, userId);
+  } else {
+    page = await PageRepository.findActivePageByUser(c.env.DB, userId);
+  }
+
+  if (!page) {
+    return c.json({ error: 'No active Facebook page. Connect and select a page first.' }, 400);
+  }
+
+  try {
+    const fbResult = await publishReel(
+      page.access_token,
+      page.facebook_page_id,
+      body.videoUrl,
+      body.caption,
+      body.scheduledAt || undefined,
+    );
+
+    const permalink = buildPermalink(page.username ?? page.facebook_page_id, fbResult.id);
+
+    const postId = crypto.randomUUID();
+    await PostRepository.createPost(c.env.DB, {
+      id: postId,
+      page_id: page.id,
+      facebook_post_id: fbResult.id,
+      permalink,
+      message: body.caption,
+      media_url: body.videoUrl || null,
+      hook_type: body.hookType || null,
+      copywriting_formula: body.formula || null,
+      tone: body.tone || 'Friendly',
+      post_format: 'Reel',
+      status: body.scheduledAt ? 'Scheduled' : 'Published',
+      scheduled_for: body.scheduledAt || null,
+      published_at: body.scheduledAt ? null : Math.floor(Date.now() / 1000),
+      user_id: userId,
+      campaign_id: body.campaignId || null,
+      generation_id: body.generationId || null,
+      reel_duration: body.reelDuration || null,
+      video_url: body.videoUrl || null,
+      script_segments: body.scriptSegments || null,
+    });
+
+    return c.json({ postId, facebookPostId: fbResult.id, permalink, status: body.scheduledAt ? 'Scheduled' : 'Published' });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : 'Reel publishing failed' }, 500);
+  }
+});
+
 // GET /api/posts — List user's posts
 postsRouter.get('/posts', async (c) => {
   const userId = await getUserIdFromRequest(c.req.raw, c.env);
   if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
-  const { status, pageId, campaignId, sortBy = 'latest', limit = '20', offset = '0' } = c.req.query();
+  const { status, pageId, campaignId, format, sortBy = 'latest', limit = '20', offset = '0' } = c.req.query();
   try {
     const posts = await PostRepository.listPosts(c.env.DB, userId, {
       status: status || undefined,
       pageId: pageId || undefined,
       campaignId: campaignId || undefined,
+      format: format || undefined,
       sortBy,
       limit: Number(limit),
       offset: Number(offset)

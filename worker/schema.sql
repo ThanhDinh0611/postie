@@ -46,7 +46,10 @@ CREATE TABLE IF NOT EXISTS posts (
   shares            INTEGER DEFAULT 0,
   views             INTEGER DEFAULT 0,
   engagement_fetched_at INTEGER,
-  last_synced_at    INTEGER
+  last_synced_at    INTEGER,
+  reel_duration     INTEGER,
+  video_url         TEXT,
+  script_segments   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS post_variants (

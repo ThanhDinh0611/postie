@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/useToast.tsx';
 import { toErrorMessage } from '@/utils/errors.ts';
 import PostGenerator from '@/components/PostGenerator.tsx';
 import PostPreview from '@/components/PostPreview.tsx';
+import ReelPreview from '@/components/ReelPreview.tsx';
 import LinkResultCard from '@/components/LinkResultCard.tsx';
 import PublishModal from '@/components/PublishModal.tsx';
 import ImageCropperModal from '@/components/ImageCropperModal.tsx';
@@ -15,41 +16,38 @@ import type { GenerateResponse, PublishResponse } from '@/api/types.ts';
 export default function HomePage() {
   const { addToast } = useToast();
 
-  // Query hooks
   const { pagesQuery } = usePages();
   const { campaignsQuery } = useCampaigns();
 
   const pages = pagesQuery.data ?? [];
   const campaigns = campaignsQuery.data ?? [];
 
-  // Selected Page State
   const [selectedPageId, setSelectedPageId] = useState('');
 
-  // Post generation/publish state
   const [generationResult, setGenerationResult] = useState<GenerateResponse | null>(null);
   const [publishResult, setPublishResult] = useState<PublishResponse | null>(null);
 
-  // Link Preview States
   const [publishType, setPublishType] = useState<'image' | 'link'>('image');
   const [targetUrl, setTargetUrl] = useState('https://google.com');
   const [linkTitle, setLinkTitle] = useState('');
   const [linkDescription, setLinkDescription] = useState('');
+  const [currentPostFormat, setCurrentPostFormat] = useState<'Post' | 'Reel' | 'Video'>('Post');
 
-  // Publish Dialog States
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [publishContent, setPublishContent] = useState('');
   const [publishMediaUrl, setPublishMediaUrl] = useState<string | undefined>(undefined);
   const [publishProgress, setPublishProgress] = useState('');
 
-  // Image Cropper hook
+  const [reelDuration, setReelDuration] = useState<number | undefined>(undefined);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
+
   const cropper = useImageCropper(1);
 
-  // Adjust aspect ratio based on publication format
   useEffect(() => {
     cropper.setAspectRatio(publishType === 'link' ? 1.91 : 1);
   }, [publishType]);
 
-  // Set default active page
   useEffect(() => {
     if (pages.length > 0 && !selectedPageId) {
       const active = pages.find(p => p.is_active);
@@ -58,8 +56,7 @@ export default function HomePage() {
     }
   }, [pages, selectedPageId]);
 
-  // Post mutation hook
-  const { generatePostMutation, publishPostMutation, uploadImageMutation } = usePosts();
+  const { generatePostMutation, publishPostMutation, publishReelMutation, uploadImageMutation, uploadVideoMutation } = usePosts();
 
   const handleGenerate = async (data: {
     topic: string;
@@ -68,8 +65,13 @@ export default function HomePage() {
     tone: string;
     postFormat: 'Post' | 'Reel' | 'Video';
     campaignId?: string;
+    publishType: 'image' | 'link';
+    targetUrl: string;
+    reelDuration?: number;
   }) => {
     setPublishResult(null);
+    setCurrentPostFormat(data.postFormat);
+    setReelDuration(data.reelDuration);
     try {
       const result = await generatePostMutation.mutateAsync({
         topic: data.topic,
@@ -77,7 +79,8 @@ export default function HomePage() {
         formula: data.formula,
         tone: data.tone,
         postFormat: data.postFormat,
-        publishType,
+        publishType: data.publishType,
+        reelDuration: data.reelDuration,
       });
 
       setGenerationResult(result);
@@ -98,12 +101,65 @@ export default function HomePage() {
     setShowPublishModal(true);
   };
 
+  const handlePublishReel = async () => {
+    if (!selectedPageId) {
+      addToast('Vui lòng chọn Fanpage để đăng bài!', 'warning');
+      return;
+    }
+    if (!generationResult?.content) {
+      addToast('Chưa có nội dung Reel để đăng.', 'warning');
+      return;
+    }
+
+    setPublishProgress('⏳ Đang chuẩn bị đăng Reel...');
+    try {
+      let finalVideoUrl: string | undefined;
+
+      if (videoFile) {
+        setPublishProgress('🎬 Đang tải video lên hệ thống...');
+        const uploadRes = await uploadVideoMutation.mutateAsync(videoFile);
+        finalVideoUrl = uploadRes.video_url;
+      }
+
+      if (!finalVideoUrl) {
+        addToast('Vui lòng tải lên video để đăng Reel.', 'error');
+        setPublishProgress('');
+        return;
+      }
+
+      setPublishProgress('📢 Đang xuất bản Reel lên Facebook...');
+
+      const result = await publishReelMutation.mutateAsync({
+        videoUrl: finalVideoUrl,
+        caption: generationResult.content,
+        pageId: selectedPageId,
+        reelDuration,
+        scriptSegments: generationResult.scriptSegments ? JSON.stringify(generationResult.scriptSegments) : undefined,
+        hookType: generationResult.selectedHook,
+        formula: generationResult.formulaApplied,
+        tone: generationResult.tone,
+        generationId: generationResult.generationId,
+      });
+
+      setGenerationResult(null);
+      setVideoFile(null);
+      setVideoPreviewUrl(null);
+      setPublishProgress('');
+
+      setPublishResult(result);
+      addToast('Đăng Reel lên Fanpage thành công! 🎬', 'success');
+    } catch (err) {
+      addToast(`Lỗi đăng Reel: ${toErrorMessage(err)}`, 'error');
+    } finally {
+      setPublishProgress('');
+    }
+  };
+
   const handleConfirmPublish = async (finalContent: string, scheduledAt?: number) => {
     setPublishProgress('⏳ Đang chuẩn bị tiến trình đăng...');
     try {
       let finalMediaUrl = publishMediaUrl;
 
-      // Unify file upload
       if (cropper.attachedFile) {
         setPublishProgress('🖼️ Đang tải hình ảnh lên hệ thống...');
         const uploadRes = await uploadImageMutation.mutateAsync(cropper.attachedFile);
@@ -119,7 +175,7 @@ export default function HomePage() {
         formula: generationResult?.formulaApplied ?? undefined,
         tone: generationResult?.tone ?? undefined,
         scheduledAt,
-        campaignId: undefined, // Campaign is selected inside form config
+        campaignId: undefined,
         generationId: generationResult?.generationId ?? undefined,
         mediaUrl: finalMediaUrl,
         publishType,
@@ -128,7 +184,6 @@ export default function HomePage() {
         linkDescription: publishType === 'link' ? linkDescription : undefined,
       });
 
-      // Clear draft on successful publish
       setGenerationResult(null);
       cropper.clearAttached();
       setLinkTitle('');
@@ -145,18 +200,33 @@ export default function HomePage() {
     }
   };
 
+  const handleVideoSelect = (file: File) => {
+    setVideoFile(file);
+    const url = URL.createObjectURL(file);
+    setVideoPreviewUrl(url);
+  };
+
+  const handleVideoRemove = () => {
+    setVideoFile(null);
+    if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
+    setVideoPreviewUrl(null);
+  };
+
   const handleReset = () => {
     setGenerationResult(null);
     setPublishResult(null);
+    setCurrentPostFormat('Post');
     cropper.clearAttached();
     setPublishMediaUrl(undefined);
     setLinkTitle('');
     setLinkDescription('');
     setPublishType('image');
     setTargetUrl('https://google.com');
+    handleVideoRemove();
   };
 
-  const isWorking = generatePostMutation.isPending || publishPostMutation.isPending || cropper.processing || uploadImageMutation.isPending;
+  const isWorking = generatePostMutation.isPending || publishPostMutation.isPending || publishReelMutation.isPending || cropper.processing || uploadImageMutation.isPending || uploadVideoMutation.isPending;
+  const isReelResult = currentPostFormat === 'Reel' && generationResult?.scriptSegments;
 
   return (
     <div className="container">
@@ -203,7 +273,6 @@ export default function HomePage() {
         </div>
       ) : (
         <div className="generator-grid">
-          {/* Config column */}
           <PostGenerator
             campaigns={campaigns}
             onGenerate={handleGenerate}
@@ -216,21 +285,35 @@ export default function HomePage() {
             setPublishType={setPublishType}
           />
 
-          {/* Preview column */}
-          <PostPreview
-            content={generationResult?.content ?? ''}
-            isPublishing={publishPostMutation.isPending}
-            onPublish={handleShowPublishModal}
-            pages={pages}
-            selectedPageId={selectedPageId}
-            setSelectedPageId={setSelectedPageId}
-            attachedImage={cropper.attachedImage}
-            publishType={publishType}
-            linkTitle={linkTitle}
-            setLinkTitle={setLinkTitle}
-            linkDescription={linkDescription}
-            setLinkDescription={setLinkDescription}
-          />
+          {isReelResult ? (
+            <ReelPreview
+              caption={generationResult.content}
+              scriptSegments={generationResult.scriptSegments ?? []}
+              reelDuration={reelDuration}
+              videoFile={videoFile}
+              videoPreviewUrl={videoPreviewUrl}
+              onVideoSelect={handleVideoSelect}
+              onVideoRemove={handleVideoRemove}
+              isPublishing={publishReelMutation.isPending || uploadVideoMutation.isPending}
+              onPublish={handlePublishReel}
+              publishProgress={publishProgress}
+            />
+          ) : (
+            <PostPreview
+              content={generationResult?.content ?? ''}
+              isPublishing={publishPostMutation.isPending}
+              onPublish={handleShowPublishModal}
+              pages={pages}
+              selectedPageId={selectedPageId}
+              setSelectedPageId={setSelectedPageId}
+              attachedImage={cropper.attachedImage}
+              publishType={publishType}
+              linkTitle={linkTitle}
+              setLinkTitle={setLinkTitle}
+              linkDescription={linkDescription}
+              setLinkDescription={setLinkDescription}
+            />
+          )}
         </div>
       )}
     </div>

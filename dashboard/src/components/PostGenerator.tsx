@@ -24,6 +24,14 @@ export const FORMULA_OPTIONS = [
 
 export const TONE_OPTIONS = ['Friendly', 'Professional', 'Humorous', 'Curious', 'Formal'];
 
+export const REEL_DURATION_OPTIONS = [
+  { value: 10, label: '10 giây' },
+  { value: 15, label: '15 giây' },
+  { value: 30, label: '30 giây' },
+  { value: 60, label: '60 giây' },
+  { value: 90, label: '90 giây' },
+];
+
 interface PostGeneratorProps {
   campaigns?: CampaignData[];
   onGenerate: (data: {
@@ -35,6 +43,7 @@ interface PostGeneratorProps {
     campaignId?: string;
     publishType: 'image' | 'link';
     targetUrl: string;
+    reelDuration?: number;
   }) => void;
   isGenerating: boolean;
 
@@ -65,6 +74,9 @@ export default function PostGenerator({
   const [postFormat, setPostFormat] = useState<'Post' | 'Reel' | 'Video'>('Post');
   const [campaignId, setCampaignId] = useState('');
   const [targetUrl, setTargetUrl] = useState('https://google.com');
+  const [reelDuration, setReelDuration] = useState(30);
+
+  const isReel = postFormat === 'Reel';
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,8 +88,9 @@ export default function PostGenerator({
       tone,
       postFormat,
       campaignId: campaignId || undefined,
-      publishType,
-      targetUrl
+      publishType: isReel ? 'image' : publishType,
+      targetUrl,
+      reelDuration: isReel ? reelDuration : undefined,
     });
   };
 
@@ -86,11 +99,13 @@ export default function PostGenerator({
       <h3 className="text-lg font-semibold" style={{ marginBottom: '1.25rem' }}>⚙️ Cấu hình nội dung AI</h3>
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label htmlFor="topic">Chủ đề bài viết</label>
+          <label htmlFor="topic">Chủ đề {isReel ? 'Reel' : 'bài viết'}</label>
           <textarea
             id="topic"
             className="form-control"
-            placeholder="Ví dụ: Giới thiệu quán cafe acoustic mới mở tại quận 1, phong cách ấm cúng, phù hợp cho cặp đôi..."
+            placeholder={isReel
+              ? 'Ví dụ: Review quán cafe mới mở, một ngày làm việc của barista, mẹo pha cà phê tại nhà...'
+              : 'Ví dụ: Giới thiệu quán cafe acoustic mới mở tại quận 1, phong cách ấm cúng, phù hợp cho cặp đôi...'}
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
             disabled={isGenerating}
@@ -98,38 +113,40 @@ export default function PostGenerator({
           />
         </div>
 
-        <div className="flex" style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '1rem' }}>
-          <div className="form-group">
-            <label htmlFor="publishType">Định dạng xuất bản</label>
-            <select
-              id="publishType"
-              className="form-control"
-              value={publishType}
-              onChange={(e) => setPublishType(e.target.value as 'image' | 'link')}
-              disabled={isGenerating}
-            >
-              <option value="image">🖼️ Đăng kèm hình ảnh (Image)</option>
-              <option value="link">🔗 Đăng kèm link Clipy (Link)</option>
-            </select>
-          </div>
+        {!isReel && (
+          <div className="flex" style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '1rem' }}>
+            <div className="form-group">
+              <label htmlFor="publishType">Định dạng xuất bản</label>
+              <select
+                id="publishType"
+                className="form-control"
+                value={publishType}
+                onChange={(e) => setPublishType(e.target.value as 'image' | 'link')}
+                disabled={isGenerating}
+              >
+                <option value="image">🖼️ Đăng kèm hình ảnh (Image)</option>
+                <option value="link">🔗 Đăng kèm link Clipy (Link)</option>
+              </select>
+            </div>
 
-          <div className="form-group">
-            <label htmlFor="tone">Giọng điệu (Tone)</label>
-            <select
-              id="tone"
-              className="form-control"
-              value={tone}
-              onChange={(e) => setTone(e.target.value)}
-              disabled={isGenerating}
-            >
-              {TONE_OPTIONS.map(t => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
+            <div className="form-group">
+              <label htmlFor="tone">Giọng điệu (Tone)</label>
+              <select
+                id="tone"
+                className="form-control"
+                value={tone}
+                onChange={(e) => setTone(e.target.value)}
+                disabled={isGenerating}
+              >
+                {TONE_OPTIONS.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
           </div>
-        </div>
+        )}
 
-        {publishType === 'link' && (
+        {!isReel && publishType === 'link' && (
           <div className="form-group">
             <label htmlFor="targetUrl">Link đích (Destination URL)</label>
             <input
@@ -177,20 +194,37 @@ export default function PostGenerator({
             </select>
           </div>
 
-          <div className="form-group">
-            <label htmlFor="formula">Công thức viết bài</label>
-            <select
-              id="formula"
-              className="form-control"
-              value={formula}
-              onChange={(e) => setFormula(e.target.value)}
-              disabled={isGenerating}
-            >
-              {FORMULA_OPTIONS.map(f => (
-                <option key={f} value={f}>{f}</option>
-              ))}
-            </select>
-          </div>
+          {isReel ? (
+            <div className="form-group">
+              <label htmlFor="reelDuration">Thời lượng Reel</label>
+              <select
+                id="reelDuration"
+                className="form-control"
+                value={reelDuration}
+                onChange={(e) => setReelDuration(Number(e.target.value))}
+                disabled={isGenerating}
+              >
+                {REEL_DURATION_OPTIONS.map(d => (
+                  <option key={d.value} value={d.value}>{d.label}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="form-group">
+              <label htmlFor="formula">Công thức viết bài</label>
+              <select
+                id="formula"
+                className="form-control"
+                value={formula}
+                onChange={(e) => setFormula(e.target.value)}
+                disabled={isGenerating}
+              >
+                {FORMULA_OPTIONS.map(f => (
+                  <option key={f} value={f}>{f}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="form-group">
@@ -208,14 +242,16 @@ export default function PostGenerator({
           </select>
         </div>
 
-        <FileAttachment
-          attachedFile={attachedFile}
-          attachedImage={attachedImage}
-          onImageSelect={onImageSelect}
-          onImageRemove={onImageRemove}
-          isGenerating={isGenerating}
-          publishType={publishType}
-        />
+        {!isReel && (
+          <FileAttachment
+            attachedFile={attachedFile}
+            attachedImage={attachedImage}
+            onImageSelect={onImageSelect}
+            onImageRemove={onImageRemove}
+            isGenerating={isGenerating}
+            publishType={publishType}
+          />
+        )}
 
         <button
           type="submit"
@@ -223,7 +259,11 @@ export default function PostGenerator({
           style={{ marginTop: '1.25rem', padding: '0.75rem' }}
           disabled={isGenerating || !topic.trim()}
         >
-          {isGenerating ? '⏳ Đang tạo nội dung AI...' : 'Tạo bài viết với AI 🤖'}
+          {isGenerating
+            ? '⏳ Đang tạo nội dung AI...'
+            : isReel
+              ? 'Tạo kịch bản Reel 🎬'
+              : 'Tạo bài viết với AI 🤖'}
         </button>
       </form>
     </div>

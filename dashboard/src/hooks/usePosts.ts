@@ -4,16 +4,18 @@ import {
   getPosts,
   generatePost,
   publishPost,
+  publishReelPost,
   clearPostCache,
   uploadImage,
+  uploadVideo,
   createPostComment,
   generateComment,
   deletePost,
   deletePostComment,
 } from '@/api/client.ts';
-import type { GenerateRequest, PublishRequest } from '@/api/types.ts';
+import type { GenerateRequest, PublishRequest, PublishReelRequest } from '@/api/types.ts';
 
-export function usePosts(filters?: { status?: string; pageId?: string; campaignId?: string; sortBy?: string; offset?: number; limit?: number }) {
+export function usePosts(filters?: { status?: string; pageId?: string; campaignId?: string; format?: string; sortBy?: string; offset?: number; limit?: number }) {
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
 
@@ -87,6 +89,26 @@ export function usePosts(filters?: { status?: string; pageId?: string; campaignI
     }
   });
 
+  const publishReelMutation = useMutation({
+    mutationFn: async (request: PublishReelRequest) => {
+      const token = await getToken();
+      if (!token) throw new Error('Not authenticated');
+      return publishReelPost(request, token);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+      queryClient.invalidateQueries({ queryKey: ['sync-status'] });
+    }
+  });
+
+  const uploadVideoMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const token = await getToken();
+      if (!token) throw new Error('Not authenticated');
+      return uploadVideo(file, token);
+    }
+  });
+
   const generateCommentMutation = useMutation({
     mutationFn: async ({ postId, params }: { postId: string; params: { useClipy: boolean; targetUrl?: string; linkTitle?: string; linkDescription?: string; imageUrl?: string } }) => {
       const token = await getToken();
@@ -111,8 +133,10 @@ export function usePosts(filters?: { status?: string; pageId?: string; campaignI
     postsQuery,
     generatePostMutation,
     publishPostMutation,
+    publishReelMutation,
     clearCacheMutation,
     uploadImageMutation,
+    uploadVideoMutation,
     deletePostMutation,
     createCommentMutation,
     generateCommentMutation,

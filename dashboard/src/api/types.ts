@@ -31,6 +31,9 @@ export interface PostData {
   engagement_fetched_at?: number | null;
   campaign_title?: string;
   campaign_color?: string;
+  reel_duration?: number | null;
+  video_url?: string | null;
+  script_segments?: string | null;
 }
 
 export interface CampaignData {
@@ -81,6 +84,13 @@ export interface GenerateRequest {
   publishType?: 'image' | 'link';
   wikiSlug?: string;
   allowWebSearch?: boolean;
+  reelDuration?: number;
+}
+
+export interface ReelScriptSegment {
+  visual: string;
+  voiceover: string;
+  durationSec: number;
 }
 
 export interface GenerateResponse {
@@ -93,6 +103,8 @@ export interface GenerateResponse {
   tone?: string;
   linkTitle?: string;
   linkDescription?: string;
+  scriptSegments?: ReelScriptSegment[];
+  reelDuration?: number;
 }
 
 export interface PublishRequest {
@@ -122,6 +134,32 @@ export interface PublishResponse {
 export interface UploadResponse {
   image_url: string;
   fileName: string;
+}
+
+export interface VideoUploadResponse {
+  video_url: string;
+  fileName: string;
+}
+
+export interface PublishReelRequest {
+  videoUrl: string;
+  caption: string;
+  pageId?: string;
+  scheduledAt?: number;
+  reelDuration?: number;
+  scriptSegments?: string;
+  hookType?: string;
+  formula?: string;
+  tone?: string;
+  campaignId?: string;
+  generationId?: string;
+}
+
+export interface PublishReelResponse {
+  postId: string;
+  facebookPostId: string;
+  permalink: string;
+  status: string;
 }
 
 export interface SyncEngagement {

@@ -1,6 +1,12 @@
 // ─── AI Post Generation Core ──────────────────────────────────────────────────
 // Handles communication with DeepSeek API for generating Facebook post content.
 
+export interface ReelScriptSegment {
+  visual: string;
+  voiceover: string;
+  durationSec: number;
+}
+
 export interface GenerateRequest {
   topic: string;
   hookType: string;
@@ -11,6 +17,7 @@ export interface GenerateRequest {
   wikiSlug?: string;
   allowWebSearch?: boolean;
   brandVoice?: string;
+  reelDuration?: number;
 }
 
 export interface GenerateResponse {
@@ -21,6 +28,8 @@ export interface GenerateResponse {
   tokenUsage: { input: number; output: number; total: number } | null;
   linkTitle?: string;
   linkDescription?: string;
+  scriptSegments?: ReelScriptSegment[];
+  reelDuration?: number;
 }
 
 const VIETNAMESE_HOOKS = [
@@ -45,12 +54,53 @@ const FORMULAS = [
 
 const TONES = ['Friendly', 'Professional', 'Humorous', 'Curious', 'Formal'];
 
-function buildPrompt(request: GenerateRequest): string {
-  const isReel = request.postFormat === 'Reel' || request.postFormat === 'Video';
-  const formatGuideline = isReel
-    ? '\n- ĐỊNH DẠNG: Reels/Video — Viết cực kỳ ngắn gọn (dưới 80 ký tự, tối đa 150 ký tự).'
-    : '';
+function buildReelPrompt(request: GenerateRequest): string {
+  const duration = request.reelDuration || 30;
+  const segmentCount = duration <= 15 ? 2 : duration <= 30 ? 3 : 6;
 
+  return `Bạn là copywriter Facebook chuyên nghiệp, viết kịch bản Reels (video ngắn) bằng tiếng Việt.
+
+YÊU CẦU:
+- Chủ đề: ${request.topic}
+- Loại Hook: ${request.hookType}
+- Công thức: ${request.formula}
+- Giọng điệu: ${request.tone}
+- Thời lượng: ${duration} giây (chia thành ${segmentCount} phân đoạn)
+- Mỗi phân đoạn có: mô tả hình ảnh (visual) + lời thoại (voiceover)
+
+QUY TẮC:
+1. VIẾT HOA phần nhấn mạnh trong lời thoại.
+2. KHÔNG dùng các cụm từ spam: "Bạn đã bao giờ tự hỏi", "Bạn có biết rằng", "đắm chìm", "trải nghiệm", "siêu phẩm", "kiệt tác".
+3. KHÔNG dùng câu mời tương tác giả tạo.
+4. Lời thoại ngắn gọn, tự nhiên, phù hợp đọc nhanh.
+5. Visual dễ hình dung, gợi ý quay cảnh hoặc hiệu ứng chữ.
+6. Kết thúc Reel bằng câu kêu gọi hành động ngắn.
+${request.brandVoice ? `\n- HƯỚNG DẪN GIỌNG ĐIỆU THƯƠNG HIỆU:\n${request.brandVoice}` : ''}
+
+Hãy trả lời theo định dạng CHÍNH XÁC sau:
+
+---selected_hook---
+Tên hook đã chọn
+---formula_applied---
+Tên công thức đã áp dụng
+---caption---
+Nội dung caption cho Reel (dưới 80 ký tự, có emoji và hashtag)
+---script---
+[
+  {
+    "visual": "Mô tả hình ảnh/cảnh quay cho phân đoạn 1",
+    "voiceover": "Lời thoại cho phân đoạn 1",
+    "durationSec": ${Math.floor(duration / segmentCount)}
+  },
+  {
+    "visual": "Mô tả hình ảnh/cảnh quay cho phân đoạn 2",
+    "voiceover": "Lời thoại cho phân đoạn 2",
+    "durationSec": ${Math.floor(duration / segmentCount)}
+  }
+]`;
+}
+
+function buildPostPrompt(request: GenerateRequest): string {
   const brandVoiceSection = request.brandVoice
     ? `\n- HƯỚNG DẪN GIỌNG ĐIỆU THƯƠNG HIỆU:\n${request.brandVoice}`
     : '';
@@ -69,7 +119,7 @@ YÊU CẦU:
 - Chủ đề: ${request.topic}
 - Loại Hook: ${request.hookType}
 - Công thức: ${request.formula}
-- Giọng điệu: ${request.tone}${formatGuideline}${brandVoiceSection}${linkGuideline}
+- Giọng điệu: ${request.tone}${brandVoiceSection}${linkGuideline}
 
 QUY TẮC:
 1. KHÔNG dùng các cụm từ spam: "Bạn đã bao giờ tự hỏi", "Bạn có biết rằng", "đắm chìm", "trải nghiệm", "siêu phẩm", "kiệt tác".
@@ -91,7 +141,14 @@ Tên công thức đã áp dụng${linkFormat}
 Nội dung bài viết hoàn chỉnh`;
 }
 
-export function parseResponse(raw: string, defaultHook: string, defaultFormula: string): GenerateResponse {
+function buildPrompt(request: GenerateRequest): string {
+  if (request.postFormat === 'Reel') {
+    return buildReelPrompt(request);
+  }
+  return buildPostPrompt(request);
+}
+
+export function parseResponse(raw: string, defaultHook: string, defaultFormula: string, postFormat?: string): GenerateResponse {
   const stripMarkdown = (text: string): string => {
     return text
       .replace(/\*\*(.*?)\*\*/g, '$1')
@@ -123,7 +180,7 @@ export function parseResponse(raw: string, defaultHook: string, defaultFormula: 
 
   const content = stripMarkdown(extract('content') ?? '') || raw;
 
-  return {
+  const result: GenerateResponse = {
     content,
     selectedHook: extract('selected_hook') ?? defaultHook,
     formulaApplied: extract('formula_applied') ?? defaultFormula,
@@ -132,6 +189,26 @@ export function parseResponse(raw: string, defaultHook: string, defaultFormula: 
     linkTitle: extract('link_title') ?? undefined,
     linkDescription: extract('link_description') ?? undefined,
   };
+
+  if (postFormat === 'Reel') {
+    const caption = extract('caption');
+    if (caption) result.content = caption;
+
+    const scriptRaw = extract('script');
+    if (scriptRaw) {
+      try {
+        const segments = JSON.parse(scriptRaw) as ReelScriptSegment[];
+        if (Array.isArray(segments) && segments.length > 0) {
+          result.scriptSegments = segments;
+          result.reelDuration = segments.reduce((sum, s) => sum + s.durationSec, 0);
+        }
+      } catch {
+        console.warn('Failed to parse Reel script segments from AI response');
+      }
+    }
+  }
+
+  return result;
 }
 
 export async function generatePostContent(
@@ -139,6 +216,21 @@ export async function generatePostContent(
   apiKey: string,
 ): Promise<GenerateResponse> {
   if (!apiKey) {
+    if (request.postFormat === 'Reel') {
+      return {
+        content: `${request.topic} #postie #facebookreels`,
+        selectedHook: request.hookType,
+        formulaApplied: request.formula,
+        variants: [],
+        tokenUsage: { input: 120, output: 250, total: 370 },
+        scriptSegments: [
+          { visual: `Cảnh mở đầu: ${request.topic}`, voiceover: `Bạn có biết ${request.topic} không?`, durationSec: 5 },
+          { visual: 'Hiệu ứng chữ xuất hiện', voiceover: 'Hãy cùng khám phá ngay!', durationSec: 5 },
+          { visual: 'Kết thúc với logo', voiceover: 'Theo dõi để biết thêm nhé!', durationSec: 5 },
+        ],
+        reelDuration: 15,
+      };
+    }
     return {
       content: `Đây là bài viết mẫu được tạo tự động bởi Postie cho chủ đề: "${request.topic}".\n\n📌 Bài viết đã được áp dụng công thức ${request.formula} và tối ưu hóa theo tông giọng ${request.tone}.\n\nBạn nghĩ sao về giải pháp này? Hãy để lại bình luận bên dưới nhé! 👇\n\n#postie #facebookmarketing`,
       selectedHook: request.hookType,
@@ -161,7 +253,12 @@ export async function generatePostContent(
     body: JSON.stringify({
       model: 'deepseek-v4-flash',
       messages: [
-        { role: 'system', content: 'Bạn là copywriter Facebook chuyên nghiệp, viết bài đăng Facebook bằng tiếng Việt tự nhiên, tránh AI-sounding. Tuân thủ chặt chẽ định dạng đầu ra được yêu cầu.' },
+        {
+          role: 'system',
+          content: request.postFormat === 'Reel'
+            ? 'Bạn là nhà sáng tạo nội dung Reels chuyên nghiệp, viết kịch bản video ngắn bằng tiếng Việt. Phân chia rõ ràng từng phân đoạn với visual và voiceover.'
+            : 'Bạn là copywriter Facebook chuyên nghiệp, viết bài đăng Facebook bằng tiếng Việt tự nhiên, tránh AI-sounding. Tuân thủ chặt chẽ định dạng đầu ra được yêu cầu.'
+        },
         { role: 'user', content: prompt },
       ],
       temperature: 0.7,
@@ -179,15 +276,18 @@ export async function generatePostContent(
   };
 
   const rawContent = data.choices[0]?.message?.content ?? '';
-  // If XML parsing returns empty, fall back to entire raw content
-  let result = parseResponse(rawContent, request.hookType, request.formula);
+  const result = parseResponse(rawContent, request.hookType, request.formula, request.postFormat);
   if (!result.content || result.content.trim() === '') {
-    result = {
+    return {
       content: rawContent,
       selectedHook: request.hookType,
       formulaApplied: request.formula,
       variants: [rawContent],
-      tokenUsage: null,
+      tokenUsage: {
+        input: data.usage?.prompt_tokens ?? 0,
+        output: data.usage?.completion_tokens ?? 0,
+        total: data.usage?.total_tokens ?? 0,
+      },
     };
   }
   result.tokenUsage = {

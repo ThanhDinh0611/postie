@@ -22,6 +22,12 @@ export interface FacebookPostInfo {
   message?: string;
   created_time?: string;
   permalink_url?: string;
+  attachments?: {
+    data: Array<{
+      type: string;
+      media?: { source?: string; image?: { src: string } };
+    }>;
+  };
 }
 
 export interface FacebookComment {
@@ -295,7 +301,7 @@ export async function getPagePosts(
   pageId: string,
   limit = 100,
 ): Promise<FacebookPostInfo[]> {
-  const url = `${GRAPH_API_BASE}/${pageId}/posts?fields=id,message,created_time,permalink_url&limit=${limit}&access_token=${pageAccessToken}`;
+  const url = `${GRAPH_API_BASE}/${pageId}/posts?fields=id,message,created_time,permalink_url,attachments{type,media}&limit=${limit}&access_token=${pageAccessToken}`;
   const res = await fetch(url);
   if (!res.ok) {
     const errText = await res.text();
@@ -402,6 +408,42 @@ export async function deleteFacebookPost(pageAccessToken: string, facebookPostId
   }
   const result = await res.json() as { success?: boolean };
   return !!result.success;
+}
+
+/**
+ * Publish a Reel (video) to a Facebook Page.
+ * Uses the /{pageId}/videos endpoint with content_category=REEL.
+ */
+export async function publishReel(
+  pageAccessToken: string,
+  pageId: string,
+  videoUrl: string,
+  description: string,
+  scheduledTime?: number,
+): Promise<FacebookPostResult> {
+  const body: Record<string, string> = {
+    access_token: pageAccessToken,
+    file_url: videoUrl,
+    description,
+    content_category: 'REEL',
+  };
+
+  if (scheduledTime) {
+    body.scheduled_publish_time = String(scheduledTime);
+    body.published = 'false';
+  }
+
+  const res = await fetch(`${GRAPH_API_BASE}/${pageId}/videos`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(body),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to publish Reel: ${res.status} ${await res.text()}`);
+  }
+
+  return res.json() as Promise<FacebookPostResult>;
 }
 
 /**

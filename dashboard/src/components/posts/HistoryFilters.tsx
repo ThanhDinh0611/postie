@@ -7,6 +7,8 @@ interface HistoryFiltersProps {
   setCampaignFilter: (val: string) => void;
   statusFilter: string;
   setStatusFilter: (val: string) => void;
+  formatFilter: string;
+  setFormatFilter: (val: string) => void;
   sortBy: string;
   setSortBy: (val: string) => void;
   pages: PageData[];
@@ -24,6 +26,8 @@ export default function HistoryFilters({
   setCampaignFilter,
   statusFilter,
   setStatusFilter,
+  formatFilter,
+  setFormatFilter,
   sortBy,
   setSortBy,
   pages,
@@ -77,6 +81,18 @@ export default function HistoryFilters({
           <option value="Scheduled">Lên lịch</option>
           <option value="Draft">Bản nháp</option>
           <option value="Failed">Lỗi</option>
+        </select>
+
+        {/* Format Filter */}
+        <select
+          className="form-control form-control-sm"
+          value={formatFilter}
+          onChange={e => setFormatFilter(e.target.value)}
+        >
+          <option value="all">Định dạng (Tất cả)</option>
+          <option value="Post">Bài đăng</option>
+          <option value="Reel">Reel</option>
+          <option value="Video">Video</option>
         </select>
 
         {/* Sorting Filter */}
