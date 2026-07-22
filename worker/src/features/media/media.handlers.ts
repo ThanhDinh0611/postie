@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { getUserIdFromRequest } from '../../core/auth.ts';
+import { generatePresignedUrl } from '../../core/r2.ts';
 
 export const mediaRouter = new Hono<{ Bindings: Env }>();
 
@@ -68,8 +69,8 @@ mediaRouter.post('/media/upload-video', async (c) => {
       customMetadata: { userId },
     });
 
-    const baseUrl = c.env.R2_PUBLIC_URL ? c.env.R2_PUBLIC_URL.replace(/\/$/, '') : `${new URL(c.req.url).origin}/media/file`;
-    const publicUrl = `${baseUrl}/${fileName}`;
+    const publicUrl = await generatePresignedUrl(fileName, c.env, 7200);
+
     return c.json({ video_url: publicUrl, fileName });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : 'Upload failed' }, 500);

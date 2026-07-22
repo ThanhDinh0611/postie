@@ -19,6 +19,9 @@ declare global {
     FACEBOOK_APP_ID: string;
     FACEBOOK_APP_SECRET: string;
     R2_PUBLIC_URL: string;
+    R2_ACCESS_KEY_ID: string;
+    R2_SECRET_ACCESS_KEY: string;
+    R2_ACCOUNT_ID: string;
     BANK_BIN?: string;
     BANK_ACCOUNT?: string;
     BANK_ACCOUNT_NAME?: string;
@@ -85,11 +88,14 @@ app.use('/api/*', async (c, next) => {
 app.get('/health', (c) => c.json({ status: 'ok', service: 'postie-worker' }));
 app.get('/', (c) => c.json({ status: 'ok', service: 'postie-worker' }));
 
+
+
 // ─── Public Media Serving from R2 ────────────────────────────────────────────
-app.get('/media/file/:userId/:filename', async (c) => {
+app.get('/media/file/:userId/*', async (c) => {
   const userId = c.req.param('userId');
-  const filename = c.req.param('filename');
-  const key = `${userId}/${filename}`;
+  const filepath = c.req.param('*');
+  if (!filepath) return c.json({ error: 'File not found' }, 404);
+  const key = `${userId}/${filepath}`;
 
   try {
     const object = await c.env.IMAGES.get(key);
@@ -99,8 +105,49 @@ app.get('/media/file/:userId/:filename', async (c) => {
     object.writeHttpMetadata(headers);
     headers.set('Access-Control-Allow-Origin', '*');
     headers.set('Cache-Control', 'public, max-age=31536000');
+    headers.set('Content-Length', String(object.size));
+    headers.set('Accept-Ranges', 'bytes');
 
-    return new Response(object.body, { headers });
+    const rangeHeader = c.req.header('range');
+    if (rangeHeader) {
+      const rangeMatch = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+      if (rangeMatch) {
+        const start = parseInt(rangeMatch[1]!, 10);
+        const end = rangeMatch[2] ? parseInt(rangeMatch[2], 10) : object.size - 1;
+        const rangeObj = await c.env.IMAGES.get(key, {
+          range: { offset: start, length: end - start + 1 },
+        });
+        if (rangeObj) {
+          headers.set('Content-Range', `bytes ${start}-${end}/${object.size}`);
+          headers.set('Content-Length', String(end - start + 1));
+          return new Response(rangeObj.body, { status: 206, headers });
+        }
+      }
+    }
+
+    return new Response(object.body, { status: 200, headers });
+  } catch (err) {
+    return c.json({ error: 'Failed to retrieve media file' }, 500);
+  }
+});
+
+app.on('HEAD', '/media/file/:userId/*', async (c) => {
+  const userId = c.req.param('userId');
+  const filepath = c.req.param('*');
+  if (!filepath) return c.json({ error: 'File not found' }, 404);
+  const key = `${userId}/${filepath}`;
+
+  try {
+    const object = await c.env.IMAGES.head(key);
+    if (!object) return c.json({ error: 'File not found' }, 404);
+
+    const headers = new Headers();
+    object.writeHttpMetadata(headers);
+    headers.set('Access-Control-Allow-Origin', '*');
+    headers.set('Cache-Control', 'public, max-age=31536000');
+    headers.set('Content-Length', String(object.size));
+    headers.set('Accept-Ranges', 'bytes');
+    return new Response(null, { status: 200, headers });
   } catch (err) {
     return c.json({ error: 'Failed to retrieve media file' }, 500);
   }

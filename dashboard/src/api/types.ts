@@ -153,7 +153,15 @@ export interface PublishReelRequest {
   tone?: string;
   campaignId?: string;
   generationId?: string;
+  contentCategory?: string;
 }
+
+export const REEL_CATEGORIES = [
+  'BEAUTY_FASHION', 'BUSINESS', 'CARS_TRUCKS', 'COMEDY', 'CUTE_ANIMALS',
+  'ENTERTAINMENT', 'FAMILY', 'FOOD_HEALTH', 'HOME', 'LIFESTYLE',
+  'MUSIC', 'NEWS', 'POLITICS', 'SCIENCE', 'SPORTS',
+  'TECHNOLOGY', 'VIDEO_GAMING', 'OTHER',
+] as const;
 
 export interface PublishReelResponse {
   postId: string;

@@ -41,6 +41,7 @@ export default function HomePage() {
   const [reelDuration, setReelDuration] = useState<number | undefined>(undefined);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
+  const [reelCategory, setReelCategory] = useState('OTHER');
 
   const cropper = useImageCropper(1);
 
@@ -139,11 +140,13 @@ export default function HomePage() {
         formula: generationResult.formulaApplied,
         tone: generationResult.tone,
         generationId: generationResult.generationId,
+        contentCategory: reelCategory,
       });
 
       setGenerationResult(null);
       setVideoFile(null);
       setVideoPreviewUrl(null);
+      setReelCategory('OTHER');
       setPublishProgress('');
 
       setPublishResult(result);
@@ -300,6 +303,8 @@ export default function HomePage() {
               pages={pages}
               selectedPageId={selectedPageId}
               setSelectedPageId={setSelectedPageId}
+              contentCategory={reelCategory}
+              setContentCategory={setReelCategory}
             />
           ) : (
             <PostPreview

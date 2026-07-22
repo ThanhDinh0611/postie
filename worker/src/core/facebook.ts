@@ -412,7 +412,7 @@ export async function deleteFacebookPost(pageAccessToken: string, facebookPostId
 
 /**
  * Publish a Reel (video) to a Facebook Page.
- * Uses the /{pageId}/videos endpoint with content_category=REEL.
+ * Uses the /{pageId}/videos endpoint with file_url.
  */
 export async function publishReel(
   pageAccessToken: string,
@@ -420,12 +420,13 @@ export async function publishReel(
   videoUrl: string,
   description: string,
   scheduledTime?: number,
+  contentCategory?: string,
 ): Promise<FacebookPostResult> {
   const body: Record<string, string> = {
     access_token: pageAccessToken,
     file_url: videoUrl,
     description,
-    content_category: 'REEL',
+    content_category: contentCategory || 'OTHER',
   };
 
   if (scheduledTime) {
@@ -437,6 +438,51 @@ export async function publishReel(
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(body),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to publish Reel: ${res.status} ${await res.text()}`);
+  }
+
+  return res.json() as Promise<FacebookPostResult>;
+}
+
+/**
+ * Publish a Reel by uploading the video file directly from R2 to Facebook.
+ * Avoids the 'Unable to fetch video file from URL' error by sending the binary
+ * data directly to Facebook's API as multipart/form-data.
+ */
+export async function publishReelDirect(
+  r2Bucket: R2Bucket,
+  pageAccessToken: string,
+  pageId: string,
+  videoFilePath: string,
+  description: string,
+  scheduledTime?: number,
+  contentCategory?: string,
+): Promise<FacebookPostResult> {
+  const object = await r2Bucket.get(videoFilePath);
+  if (!object) throw new Error('Video file not found in storage');
+  if (!object.body) throw new Error('Video file body is empty');
+
+  const buffer = await new Response(object.body).arrayBuffer();
+  const contentType = object.httpMetadata?.contentType || 'video/mp4';
+  const blob = new Blob([buffer], { type: contentType });
+
+  const formData = new FormData();
+  formData.append('source', blob, 'video.mp4');
+  formData.append('access_token', pageAccessToken);
+  formData.append('description', description);
+  formData.append('content_category', contentCategory || 'OTHER');
+
+  if (scheduledTime) {
+    formData.append('scheduled_publish_time', String(scheduledTime));
+    formData.append('published', 'false');
+  }
+
+  const res = await fetch(`${GRAPH_API_BASE}/${pageId}/videos`, {
+    method: 'POST',
+    body: formData,
   });
 
   if (!res.ok) {

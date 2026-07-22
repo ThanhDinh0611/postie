@@ -122,6 +122,7 @@ postsRouter.post('/posts/publish-reel', zValidator('json', publishReelSchema), a
       body.videoUrl,
       body.caption,
       body.scheduledAt || undefined,
+      body.contentCategory,
     );
 
     const permalink = buildPermalink(page.username ?? page.facebook_page_id, fbResult.id);
