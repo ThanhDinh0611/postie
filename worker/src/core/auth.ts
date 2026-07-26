@@ -91,6 +91,11 @@ export async function authorizeFeature(
   userId: string, feature: keyof TierCapabilities,
   env: { DB: D1Database; CLERK_JWKS_URL: string }, request: Request,
 ): Promise<{ authorized: boolean; reason?: string }> {
+  const adminRow = await env.DB
+    .prepare('SELECT role FROM user_profiles WHERE user_id = ?')
+    .bind(userId).first<{ role: string }>();
+  if (adminRow?.role === 'admin') return { authorized: true };
+
   const tier = await getUserTier(request, env, userId);
   const caps = getTierCapabilities(tier);
   const limit = caps[feature];
