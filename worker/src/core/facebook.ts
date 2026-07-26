@@ -87,9 +87,46 @@ export async function getUserPages(userAccessToken: string): Promise<FacebookPag
 }
 
 /**
+ * Upload an image to Facebook via multipart `source` — the most reliable
+ * approach because Facebook receives the bytes directly instead of crawling
+ * a URL (which can fail due to Cloudflare WAF, TLS, or DNS issues).
+ */
+async function publishPhotoWithSource(
+  pageAccessToken: string,
+  pageId: string,
+  message: string,
+  imageBytes: ArrayBuffer,
+  contentType: string,
+  scheduledTime?: number,
+): Promise<FacebookPostResult> {
+  const formData = new FormData();
+  formData.append('access_token', pageAccessToken);
+  formData.append('caption', message);
+  formData.append('source', new Blob([imageBytes], { type: contentType }), 'image.jpg');
+
+  if (scheduledTime) {
+    formData.append('published', 'false');
+    formData.append('scheduled_publish_time', String(scheduledTime));
+  } else {
+    formData.append('published', 'true');
+  }
+
+  const res = await fetch(`${GRAPH_API_BASE}/${pageId}/photos`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) throw new Error(`Failed to publish photo post: ${res.status} ${await res.text()}`);
+  const result = await res.json() as Record<string, string>;
+  return { id: result.post_id ?? result.id } as FacebookPostResult;
+}
+
+/**
  * Publish a post to a Facebook Page.
  *
- * - Photo post:   POST /{pageId}/photos   with url + caption
+ * Photo posts rely on `publishPhotoWithSource` (multipart `source`) when an
+ * `imagesBucket` is provided — this is the reliable path.  Falls back to the
+ * URL-based `/{pageId}/photos` endpoint when no bucket is available.
+ *
  * - Link post:    POST /{pageId}/feed     with message + link
  * - Text post:    POST /{pageId}/feed     with message
  */
@@ -100,13 +137,25 @@ export async function publishPost(
   mediaUrl?: string,
   scheduledTime?: number,
   link?: string,
+  imagesBucket?: R2Bucket,
 ): Promise<FacebookPostResult> {
   const isPhoto = !!mediaUrl && !link;
+
+  if (isPhoto && imagesBucket) {
+    const imageData = await downloadFromR2(mediaUrl!, imagesBucket);
+    if (imageData) {
+      return publishPhotoWithSource(
+        pageAccessToken, pageId, message,
+        imageData.bytes, imageData.contentType,
+        scheduledTime,
+      );
+    }
+  }
 
   if (isPhoto) {
     const body: Record<string, string> = {
       access_token: pageAccessToken,
-      url: mediaUrl,
+      url: mediaUrl!,
       caption: message,
     };
 
@@ -148,6 +197,30 @@ export async function publishPost(
   if (!res.ok) throw new Error(`Failed to publish post: ${res.status} ${await res.text()}`);
   const result = await res.json() as Record<string, string>;
   return { id: result.post_id ?? result.id } as FacebookPostResult;
+}
+
+/**
+ * Extract the R2 key from a worker-served media URL and download the image.
+ * Expects URLs in the form: {origin}/media/file/{userId}/{filepath}
+ */
+async function downloadFromR2(
+  url: string,
+  bucket: R2Bucket,
+): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
+  try {
+    const parsed = new URL(url);
+    const match = parsed.pathname.match(/^\/media\/file\/([^/]+)\/(.+)$/);
+    if (!match) return null;
+    const key = `${match[1]}/${match[2]}`;
+    const object = await bucket.get(key);
+    if (!object) return null;
+    return {
+      bytes: await object.arrayBuffer(),
+      contentType: object.httpMetadata?.contentType ?? 'image/jpeg',
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**

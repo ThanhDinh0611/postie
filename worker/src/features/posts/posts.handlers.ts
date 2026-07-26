@@ -59,7 +59,8 @@ postsRouter.post('/posts/publish', zValidator('json', publishPostSchema), async 
       finalContent,
       fbMediaUrl,
       body.scheduledAt || undefined,
-      shortUrl || undefined
+      shortUrl || undefined,
+      c.env.IMAGES,
     );
     const permalink = buildPermalink(page.username ?? page.facebook_page_id, fbResult.id);
 
