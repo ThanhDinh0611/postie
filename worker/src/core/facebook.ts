@@ -88,6 +88,10 @@ export async function getUserPages(userAccessToken: string): Promise<FacebookPag
 
 /**
  * Publish a post to a Facebook Page.
+ *
+ * - Photo post:   POST /{pageId}/photos   with url + caption
+ * - Link post:    POST /{pageId}/feed     with message + link
+ * - Text post:    POST /{pageId}/feed     with message
  */
 export async function publishPost(
   pageAccessToken: string,
@@ -97,38 +101,53 @@ export async function publishPost(
   scheduledTime?: number,
   link?: string,
 ): Promise<FacebookPostResult> {
-  const body: Record<string, string> = { message, access_token: pageAccessToken };
+  const isPhoto = !!mediaUrl && !link;
 
-  if (scheduledTime) {
-    body.scheduled_publish_time = String(scheduledTime);
-    body.published = 'false';
-  }
+  if (isPhoto) {
+    const body: Record<string, string> = {
+      access_token: pageAccessToken,
+      url: mediaUrl,
+      caption: message,
+    };
 
-  if (mediaUrl) {
-    // Photo post
-    body.url = mediaUrl;
+    if (scheduledTime) {
+      body.scheduled_publish_time = String(scheduledTime);
+      body.published = 'false';
+    } else {
+      body.published = 'true';
+    }
+
     const res = await fetch(`${GRAPH_API_BASE}/${pageId}/photos`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams(body),
     });
     if (!res.ok) throw new Error(`Failed to publish photo post: ${res.status} ${await res.text()}`);
-    return res.json() as Promise<FacebookPostResult>;
+    const photoResult = await res.json() as Record<string, string>;
+    return { id: photoResult.post_id ?? photoResult.id } as FacebookPostResult;
   }
 
-  // Text/Link post
+  const body: Record<string, string> = {
+    access_token: pageAccessToken,
+    message,
+  };
+
   if (link) {
     body.link = link;
-  } else {
-    body.no_story = 'true';
   }
+
+  if (scheduledTime) {
+    body.scheduled_publish_time = String(scheduledTime);
+  }
+
   const res = await fetch(`${GRAPH_API_BASE}/${pageId}/feed`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(body),
   });
   if (!res.ok) throw new Error(`Failed to publish post: ${res.status} ${await res.text()}`);
-  return res.json() as Promise<FacebookPostResult>;
+  const result = await res.json() as Record<string, string>;
+  return { id: result.post_id ?? result.id } as FacebookPostResult;
 }
 
 /**
