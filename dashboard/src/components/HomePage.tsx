@@ -41,7 +41,7 @@ export default function HomePage() {
   const [reelDuration, setReelDuration] = useState<number | undefined>(undefined);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
-  const [reelCategory, setReelCategory] = useState('OTHER');
+
 
   const cropper = useImageCropper(1);
 
@@ -57,7 +57,7 @@ export default function HomePage() {
     }
   }, [pages, selectedPageId]);
 
-  const { generatePostMutation, publishPostMutation, publishReelMutation, uploadImageMutation, uploadVideoMutation } = usePosts();
+  const { generatePostMutation, publishPostMutation, publishReelMutation, uploadImageMutation } = usePosts();
 
   const handleGenerate = async (data: {
     topic: string;
@@ -111,27 +111,15 @@ export default function HomePage() {
       addToast('Chưa có nội dung Reel để đăng.', 'warning');
       return;
     }
+    if (!videoFile) {
+      addToast('Vui lòng tải lên video để đăng Reel.', 'error');
+      return;
+    }
 
-    setPublishProgress('⏳ Đang chuẩn bị đăng Reel...');
+    setPublishProgress('📢 Đang xuất bản Reel lên Facebook...');
     try {
-      let finalVideoUrl: string | undefined;
-
-      if (videoFile) {
-        setPublishProgress('🎬 Đang tải video lên hệ thống...');
-        const uploadRes = await uploadVideoMutation.mutateAsync(videoFile);
-        finalVideoUrl = uploadRes.video_url;
-      }
-
-      if (!finalVideoUrl) {
-        addToast('Vui lòng tải lên video để đăng Reel.', 'error');
-        setPublishProgress('');
-        return;
-      }
-
-      setPublishProgress('📢 Đang xuất bản Reel lên Facebook...');
-
       const result = await publishReelMutation.mutateAsync({
-        videoUrl: finalVideoUrl,
+        videoFile,
         caption: generationResult.content,
         pageId: selectedPageId,
         reelDuration,
@@ -140,13 +128,11 @@ export default function HomePage() {
         formula: generationResult.formulaApplied,
         tone: generationResult.tone,
         generationId: generationResult.generationId,
-        contentCategory: reelCategory,
       });
 
       setGenerationResult(null);
       setVideoFile(null);
       setVideoPreviewUrl(null);
-      setReelCategory('OTHER');
       setPublishProgress('');
 
       setPublishResult(result);
@@ -228,7 +214,7 @@ export default function HomePage() {
     handleVideoRemove();
   };
 
-  const isWorking = generatePostMutation.isPending || publishPostMutation.isPending || publishReelMutation.isPending || cropper.processing || uploadImageMutation.isPending || uploadVideoMutation.isPending;
+  const isWorking = generatePostMutation.isPending || publishPostMutation.isPending || publishReelMutation.isPending || cropper.processing || uploadImageMutation.isPending;
   const isReelResult = currentPostFormat === 'Reel' && generationResult?.scriptSegments;
 
   return (
@@ -297,14 +283,12 @@ export default function HomePage() {
               videoPreviewUrl={videoPreviewUrl}
               onVideoSelect={handleVideoSelect}
               onVideoRemove={handleVideoRemove}
-              isPublishing={publishReelMutation.isPending || uploadVideoMutation.isPending}
+              isPublishing={publishReelMutation.isPending}
               onPublish={handlePublishReel}
               publishProgress={publishProgress}
               pages={pages}
               selectedPageId={selectedPageId}
               setSelectedPageId={setSelectedPageId}
-              contentCategory={reelCategory}
-              setContentCategory={setReelCategory}
             />
           ) : (
             <PostPreview

@@ -117,10 +117,23 @@ export async function uploadVideo(file: File, token: string): Promise<VideoUploa
 }
 
 export async function publishReelPost(request: PublishReelRequest, token: string): Promise<PublishReelResponse> {
+  const form = new FormData();
+  form.append('video', request.videoFile);
+  form.append('caption', request.caption);
+  if (request.pageId) form.append('pageId', request.pageId);
+  if (request.scheduledAt) form.append('scheduledAt', String(request.scheduledAt));
+  if (request.reelDuration) form.append('reelDuration', String(request.reelDuration));
+  if (request.scriptSegments) form.append('scriptSegments', request.scriptSegments);
+  if (request.hookType) form.append('hookType', request.hookType);
+  if (request.formula) form.append('formula', request.formula);
+  if (request.tone) form.append('tone', request.tone);
+  if (request.campaignId) form.append('campaignId', request.campaignId);
+  if (request.generationId) form.append('generationId', request.generationId);
+
   return fetchJson<PublishReelResponse>(`${API_BASE}/api/posts/publish-reel`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
-    body: JSON.stringify(request),
+    headers: authHeaders(token),
+    body: form,
   });
 }
 

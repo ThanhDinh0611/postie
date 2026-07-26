@@ -1,5 +1,4 @@
 import type { ReelScriptSegment, PageData } from '@/api/types.ts';
-import { REEL_CATEGORIES } from '@/api/types.ts';
 
 interface ReelPreviewProps {
   caption: string;
@@ -15,8 +14,6 @@ interface ReelPreviewProps {
   pages: PageData[];
   selectedPageId: string;
   setSelectedPageId: (id: string) => void;
-  contentCategory: string;
-  setContentCategory: (cat: string) => void;
 }
 
 export default function ReelPreview({
@@ -33,8 +30,6 @@ export default function ReelPreview({
   pages,
   selectedPageId,
   setSelectedPageId,
-  contentCategory,
-  setContentCategory,
 }: ReelPreviewProps) {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -158,22 +153,6 @@ export default function ReelPreview({
           {publishProgress}
         </div>
       )}
-
-      <div className="form-group mb-0">
-        <label className="font-semibold">📂 Thể loại Reel</label>
-        <select
-          className="form-control"
-          value={contentCategory}
-          onChange={(e) => setContentCategory(e.target.value)}
-          disabled={isPublishing}
-        >
-          {REEL_CATEGORIES.map((cat) => (
-            <option key={cat} value={cat}>
-              {cat.replace(/_/g, ' ')}
-            </option>
-          ))}
-        </select>
-      </div>
 
       <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: '1rem' }} className="flex-col gap-12">
         <div className="form-group mb-0">

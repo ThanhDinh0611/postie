@@ -142,7 +142,7 @@ export interface VideoUploadResponse {
 }
 
 export interface PublishReelRequest {
-  videoUrl: string;
+  videoFile: File;
   caption: string;
   pageId?: string;
   scheduledAt?: number;
@@ -153,7 +153,6 @@ export interface PublishReelRequest {
   tone?: string;
   campaignId?: string;
   generationId?: string;
-  contentCategory?: string;
 }
 
 export const REEL_CATEGORIES = [
