@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { isAdminRequest, getUserIdFromRequest } from './core/auth.ts';
+import { isAdminRequest, getUserIdFromRequest, verifyClerkJWT } from './core/auth.ts';
 import { pagesRouter } from './features/pages/pages.handlers.ts';
 import { postsRouter } from './features/posts/posts.handlers.ts';
 import { mediaRouter } from './features/media/media.handlers.ts';
@@ -51,23 +51,36 @@ app.use('*', async (c, next) => {
 
 // ─── Auth Sync Endpoint (Bypass Admin checking for initial signups) ──────────
 app.post('/api/auth/sync', async (c) => {
-  const userId = await getUserIdFromRequest(c.req.raw, c.env);
-  if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401);
+
+  const payload = await verifyClerkJWT(authHeader.slice(7), c.env.CLERK_JWKS_URL);
+  if (!payload) return c.json({ error: 'Unauthorized' }, 401);
+
+  const clerkRole = payload.publicMetadata?.role ?? payload.role ?? 'user';
 
   try {
     const existing = await c.env.DB
       .prepare('SELECT role FROM user_profiles WHERE user_id = ?')
-      .bind(userId)
+      .bind(payload.sub)
       .first<{ role: string }>();
 
     if (!existing) {
       await c.env.DB
         .prepare('INSERT INTO user_profiles (user_id, tier, subscription_status, role) VALUES (?, ?, ?, ?)')
-        .bind(userId, 'free', 'active', 'user')
+        .bind(payload.sub, 'free', 'active', clerkRole)
         .run();
-      return c.json({ success: true, role: 'user' });
+      return c.json({ success: true, role: clerkRole });
     }
-    return c.json({ success: true, role: existing.role });
+
+    if (existing.role !== clerkRole) {
+      await c.env.DB
+        .prepare('UPDATE user_profiles SET role = ? WHERE user_id = ?')
+        .bind(clerkRole, payload.sub)
+        .run();
+    }
+
+    return c.json({ success: true, role: clerkRole });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
   }

@@ -410,86 +410,89 @@ export async function deleteFacebookPost(pageAccessToken: string, facebookPostId
   return !!result.success;
 }
 
+interface ReelUploadSession {
+  video_id: string;
+  upload_url: string;
+}
+
 /**
- * Publish a Reel (video) to a Facebook Page.
- * Uses the /{pageId}/videos endpoint with file_url.
+ * Publish a Reel to a Facebook Page using the 3-step video_reels API.
+ *
+ * Step 1 - Initialize:   POST /{pageId}/video_reels  { upload_phase: "start" }
+ *                         → returns { video_id, upload_url }
+ * Step 2 - Upload:       POST {upload_url}            binary stream (OAuth)
+ * Step 3 - Finalize:     POST /{pageId}/video_reels  { upload_phase: "finish",
+ *                         video_id, description, video_state }
+ *
+ * Accepts the raw video buffer directly — no intermediate storage (R2, etc.).
  */
 export async function publishReel(
   pageAccessToken: string,
   pageId: string,
-  videoUrl: string,
+  videoBuffer: ArrayBuffer,
   description: string,
   scheduledTime?: number,
-  contentCategory?: string,
 ): Promise<FacebookPostResult> {
-  const body: Record<string, string> = {
+  const pageEndpoint = `${GRAPH_API_BASE}/${pageId}/video_reels`;
+
+  // ── Step 1: Initialize upload session ──────────────────────────────
+  const initRes = await fetch(pageEndpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      access_token: pageAccessToken,
+      upload_phase: 'start',
+    }),
+  });
+
+  if (!initRes.ok) {
+    throw new Error(`Failed to initialize Reel upload: ${initRes.status} ${await initRes.text()}`);
+  }
+
+  const { video_id, upload_url } = await initRes.json() as ReelUploadSession;
+
+  // ── Step 2: Upload video binary to the session URL ─────────────────
+  const uploadRes = await fetch(upload_url, {
+    method: 'POST',
+    headers: {
+      Authorization: `OAuth ${pageAccessToken}`,
+      offset: '0',
+      file_size: String(videoBuffer.byteLength),
+      'Content-Type': 'application/octet-stream',
+    },
+    body: videoBuffer,
+  });
+
+  if (!uploadRes.ok) {
+    throw new Error(`Failed to upload Reel video: ${uploadRes.status} ${await uploadRes.text()}`);
+  }
+
+  // ── Step 3: Finalize & publish ─────────────────────────────────────
+  const publishBody: Record<string, string> = {
     access_token: pageAccessToken,
-    file_url: videoUrl,
+    video_id,
+    upload_phase: 'finish',
     description,
-    content_category: contentCategory || 'OTHER',
   };
 
   if (scheduledTime) {
-    body.scheduled_publish_time = String(scheduledTime);
-    body.published = 'false';
+    publishBody.video_state = 'SCHEDULED';
+    publishBody.scheduled_publish_time = String(scheduledTime);
+  } else {
+    publishBody.video_state = 'PUBLISHED';
   }
 
-  const res = await fetch(`${GRAPH_API_BASE}/${pageId}/videos`, {
+  const publishRes = await fetch(pageEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams(body),
+    body: new URLSearchParams(publishBody),
   });
 
-  if (!res.ok) {
-    throw new Error(`Failed to publish Reel: ${res.status} ${await res.text()}`);
+  if (!publishRes.ok) {
+    throw new Error(`Failed to finalize Reel: ${publishRes.status} ${await publishRes.text()}`);
   }
 
-  return res.json() as Promise<FacebookPostResult>;
-}
-
-/**
- * Publish a Reel by uploading the video file directly from R2 to Facebook.
- * Avoids the 'Unable to fetch video file from URL' error by sending the binary
- * data directly to Facebook's API as multipart/form-data.
- */
-export async function publishReelDirect(
-  r2Bucket: R2Bucket,
-  pageAccessToken: string,
-  pageId: string,
-  videoFilePath: string,
-  description: string,
-  scheduledTime?: number,
-  contentCategory?: string,
-): Promise<FacebookPostResult> {
-  const object = await r2Bucket.get(videoFilePath);
-  if (!object) throw new Error('Video file not found in storage');
-  if (!object.body) throw new Error('Video file body is empty');
-
-  const buffer = await new Response(object.body).arrayBuffer();
-  const contentType = object.httpMetadata?.contentType || 'video/mp4';
-  const blob = new Blob([buffer], { type: contentType });
-
-  const formData = new FormData();
-  formData.append('source', blob, 'video.mp4');
-  formData.append('access_token', pageAccessToken);
-  formData.append('description', description);
-  formData.append('content_category', contentCategory || 'OTHER');
-
-  if (scheduledTime) {
-    formData.append('scheduled_publish_time', String(scheduledTime));
-    formData.append('published', 'false');
-  }
-
-  const res = await fetch(`${GRAPH_API_BASE}/${pageId}/videos`, {
-    method: 'POST',
-    body: formData,
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to publish Reel: ${res.status} ${await res.text()}`);
-  }
-
-  return res.json() as Promise<FacebookPostResult>;
+  return { id: `${pageId}_${video_id}` } as FacebookPostResult;
 }
 
 /**

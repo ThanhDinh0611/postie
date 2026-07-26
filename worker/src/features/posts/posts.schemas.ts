@@ -29,28 +29,6 @@ export const generatePostSchema = z.object({
   reelDuration: z.number().int().positive().optional(),
 });
 
-export const REEL_CATEGORIES = [
-  'BEAUTY_FASHION', 'BUSINESS', 'CARS_TRUCKS', 'COMEDY', 'CUTE_ANIMALS',
-  'ENTERTAINMENT', 'FAMILY', 'FOOD_HEALTH', 'HOME', 'LIFESTYLE',
-  'MUSIC', 'NEWS', 'POLITICS', 'SCIENCE', 'SPORTS',
-  'TECHNOLOGY', 'VIDEO_GAMING', 'OTHER',
-] as const;
-
-export const publishReelSchema = z.object({
-  videoUrl: z.string().url('videoUrl must be a valid URL'),
-  caption: z.string().min(1, 'caption is required'),
-  pageId: z.string().optional(),
-  scheduledAt: z.number().int().positive().nullable().optional(),
-  reelDuration: z.number().int().positive().optional(),
-  scriptSegments: z.string().optional(),
-  hookType: z.string().optional(),
-  formula: z.string().optional(),
-  tone: z.string().optional(),
-  campaignId: z.string().optional(),
-  generationId: z.string().optional(),
-  contentCategory: z.enum(REEL_CATEGORIES).optional(),
-});
-
 export const createCommentSchema = z.object({
   message: z.string().min(1, 'message is required'),
   attachmentUrl: z.string().url('attachmentUrl must be a valid URL').or(z.literal('')).nullable().optional(),

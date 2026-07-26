@@ -11,7 +11,6 @@ import {
   generatePostSchema,
   createCommentSchema,
   generateCommentSchema,
-  publishReelSchema
 } from './posts.schemas.ts';
 
 export const postsRouter = new Hono<{ Bindings: Env }>();
@@ -91,22 +90,37 @@ postsRouter.post('/posts/publish', zValidator('json', publishPostSchema), async 
 });
 
 // POST /api/posts/publish-reel — Publish a Reel to Facebook
-postsRouter.post('/posts/publish-reel', zValidator('json', publishReelSchema), async (c) => {
+// Accepts multipart/form-data with the video file directly (no R2 intermediate).
+postsRouter.post('/posts/publish-reel', async (c) => {
   const userId = await getUserIdFromRequest(c.req.raw, c.env);
   if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
   const authResult = await authorizeFeature(userId, 'maxPostsPerMonth', c.env, c.req.raw);
   if (!authResult.authorized) return c.json({ error: authResult.reason }, 403);
 
-  const body = c.req.valid('json');
-
-  // Check tier allows Reels
   const tierResult = await authorizeFeature(userId, 'allowReels', c.env, c.req.raw);
   if (!tierResult.authorized) return c.json({ error: tierResult.reason }, 403);
 
+  const formData = await c.req.parseBody<Record<string, string | File>>();
+  const videoFile = formData['video'] as File | undefined;
+  if (!videoFile) return c.json({ error: 'No video file provided' }, 400);
+
+  const caption = formData['caption'] as string | undefined;
+  if (!caption) return c.json({ error: 'caption is required' }, 400);
+
+  const pageId = formData['pageId'] as string | undefined;
+  const scheduledAt = formData['scheduledAt'] ? Number(formData['scheduledAt']) : undefined;
+  const reelDuration = formData['reelDuration'] ? Number(formData['reelDuration']) : undefined;
+  const scriptSegments = formData['scriptSegments'] as string | undefined;
+  const hookType = formData['hookType'] as string | undefined;
+  const formula = formData['formula'] as string | undefined;
+  const tone = formData['tone'] as string | undefined;
+  const campaignId = formData['campaignId'] as string | undefined;
+  const generationId = formData['generationId'] as string | undefined;
+
   let page;
-  if (body.pageId) {
-    page = await PageRepository.findPageByIdAndUser(c.env.DB, body.pageId, userId);
+  if (pageId) {
+    page = await PageRepository.findPageByIdAndUser(c.env.DB, pageId, userId);
   } else {
     page = await PageRepository.findActivePageByUser(c.env.DB, userId);
   }
@@ -116,13 +130,14 @@ postsRouter.post('/posts/publish-reel', zValidator('json', publishReelSchema), a
   }
 
   try {
+    const videoBuffer = await videoFile.arrayBuffer();
+
     const fbResult = await publishReel(
       page.access_token,
       page.facebook_page_id,
-      body.videoUrl,
-      body.caption,
-      body.scheduledAt || undefined,
-      body.contentCategory,
+      videoBuffer,
+      caption,
+      scheduledAt,
     );
 
     const permalink = buildPermalink(page.username ?? page.facebook_page_id, fbResult.id);
@@ -133,24 +148,24 @@ postsRouter.post('/posts/publish-reel', zValidator('json', publishReelSchema), a
       page_id: page.id,
       facebook_post_id: fbResult.id,
       permalink,
-      message: body.caption,
-      media_url: body.videoUrl || null,
-      hook_type: body.hookType || null,
-      copywriting_formula: body.formula || null,
-      tone: body.tone || 'Friendly',
+      message: caption,
+      media_url: null,
+      hook_type: hookType || null,
+      copywriting_formula: formula || null,
+      tone: tone || 'Friendly',
       post_format: 'Reel',
-      status: body.scheduledAt ? 'Scheduled' : 'Published',
-      scheduled_for: body.scheduledAt || null,
-      published_at: body.scheduledAt ? null : Math.floor(Date.now() / 1000),
+      status: scheduledAt ? 'Scheduled' : 'Published',
+      scheduled_for: scheduledAt || null,
+      published_at: scheduledAt ? null : Math.floor(Date.now() / 1000),
       user_id: userId,
-      campaign_id: body.campaignId || null,
-      generation_id: body.generationId || null,
-      reel_duration: body.reelDuration || null,
-      video_url: body.videoUrl || null,
-      script_segments: body.scriptSegments || null,
+      campaign_id: campaignId || null,
+      generation_id: generationId || null,
+      reel_duration: reelDuration || null,
+      video_url: null,
+      script_segments: scriptSegments || null,
     });
 
-    return c.json({ postId, facebookPostId: fbResult.id, permalink, status: body.scheduledAt ? 'Scheduled' : 'Published' });
+    return c.json({ postId, facebookPostId: fbResult.id, permalink, status: scheduledAt ? 'Scheduled' : 'Published' });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : 'Reel publishing failed' }, 500);
   }

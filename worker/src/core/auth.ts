@@ -1,6 +1,6 @@
 import { getTierCapabilities, type TierCapabilities } from './tiers.ts';
 
-interface ClerkJWTPayload {
+export interface ClerkJWTPayload {
   sub: string;
   exp: number;
   iat: number;
@@ -19,7 +19,7 @@ function base64UrlDecode(str: string): string {
   return atob(s + pad);
 }
 
-async function verifyClerkJWT(token: string, jwksUrl: string): Promise<ClerkJWTPayload | null> {
+export async function verifyClerkJWT(token: string, jwksUrl: string): Promise<ClerkJWTPayload | null> {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
