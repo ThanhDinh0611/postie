@@ -69,39 +69,32 @@ export class PageRepository {
     userId: string,
     fbPages: Array<{ id: string; name: string; username?: string; access_token: string; picture?: { data: { url: string } } }>
   ): Promise<Array<{ id: string; name: string; username?: string; avatarUrl?: string }>> {
-    // Fetch existing
-    const existing = await db
-      .prepare('SELECT id, facebook_page_id FROM pages WHERE user_id = ?')
-      .bind(userId)
-      .all<{ id: string; facebook_page_id: string }>();
-
-    const existingMap = new Map(existing.results?.map(r => [r.facebook_page_id, r.id]) ?? []);
     const saved: Array<{ id: string; name: string; username?: string; avatarUrl?: string }> = [];
-    const statements: D1PreparedStatement[] = [];
 
     for (const page of fbPages) {
-      const existingId = existingMap.get(page.id);
       const avatarUrl = page.picture?.data?.url ?? null;
 
-      if (existingId) {
-        statements.push(db
-          .prepare('UPDATE pages SET name = ?, username = ?, access_token = ?, avatar_url = ? WHERE id = ?')
-          .bind(page.name, page.username ?? null, page.access_token, avatarUrl, existingId)
-        );
-        saved.push({ id: existingId, name: page.name, username: page.username, avatarUrl: avatarUrl ?? undefined });
+      const existing = await db
+        .prepare('SELECT id, user_id FROM pages WHERE facebook_page_id = ?')
+        .bind(page.id)
+        .first<{ id: string; user_id: string }>();
+
+      if (existing) {
+        await db
+          .prepare('UPDATE pages SET name = ?, username = ?, access_token = ?, avatar_url = ?, user_id = ? WHERE id = ?')
+          .bind(page.name, page.username ?? null, page.access_token, avatarUrl, userId, existing.id)
+          .run();
+        saved.push({ id: existing.id, name: page.name, username: page.username, avatarUrl: avatarUrl ?? undefined });
       } else {
         const newId = crypto.randomUUID();
-        statements.push(db
+        await db
           .prepare('INSERT INTO pages (id, facebook_page_id, name, username, access_token, avatar_url, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
           .bind(newId, page.id, page.name, page.username ?? null, page.access_token, avatarUrl, userId)
-        );
+          .run();
         saved.push({ id: newId, name: page.name, username: page.username, avatarUrl: avatarUrl ?? undefined });
       }
     }
 
-    if (statements.length > 0) {
-      await db.batch(statements);
-    }
     return saved;
   }
 
